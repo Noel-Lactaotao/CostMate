@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:costmate/providers/user_info_provider.dart';
 import 'package:costmate/screens/main_screen.dart';
 import 'package:costmate/validation/validation_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class MyHomeScreen extends StatefulWidget {
   const MyHomeScreen({
@@ -426,13 +428,19 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
           await doc.reference.delete();
         }
 
+        // ✅ Refresh userInfoProvider
+        final container = ProviderScope.containerOf(context, listen: false);
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          container.read(userInfoProvider.notifier).loadUserData(user);
+        }
+
         if (!context.mounted) return;
 
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('You left the group.')));
 
-        // ✅ Navigate to MainScreen after successful removal
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const MainScreen()),
@@ -457,6 +465,13 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
 
       await ValidationService().deleteGroupWithSubcollections(groupId);
 
+      // ✅ Refresh userInfoProvider
+      final container = ProviderScope.containerOf(context, listen: false);
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        container.read(userInfoProvider.notifier).loadUserData(user);
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Group deleted successfully.')),
       );
@@ -477,6 +492,13 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
           .doc(groupId);
 
       await groupRef.update({'groupName': newName});
+
+      // ✅ Refresh userInfoProvider
+      final container = ProviderScope.containerOf(context, listen: false);
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        container.read(userInfoProvider.notifier).loadUserData(user);
+      }
 
       ScaffoldMessenger.of(
         context,

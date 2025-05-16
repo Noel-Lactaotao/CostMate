@@ -6,6 +6,7 @@ import 'package:costmate/screens/main_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -20,7 +21,7 @@ void main() async {
         storageBucket: "costmate-58c96.firebasestorage.app",
         messagingSenderId: "419867456944",
         appId: "1:419867456944:web:43b65c7c4d5e6753871275",
-        measurementId: "G-L3D5XH7Y4Z"
+        measurementId: "G-L3D5XH7Y4Z",
       ),
     );
   } else {
@@ -28,8 +29,8 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
-  
-  runApp(const MainApp());
+
+  runApp(ProviderScope(child: const MainApp(),));
 }
 
 class MainApp extends StatelessWidget {
@@ -48,10 +49,10 @@ class MainApp extends StatelessWidget {
         '/signin': (context) => const SignInScreen(),
         '/signup': (context) => const SignUpScreen(),
         '/home': (context) => const MainScreen(), // Main screen route
-        '/group': (context) => GroupScreen(onUpdateAppBar: (appBar) {}), // Group screen
+        '/group':
+            (context) =>
+                GroupScreen(onUpdateAppBar: (appBar) {}), // Group screen
       },
     );
   }
 }
-
-
