@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "419867456944",
+    "project_id": "costmate-58c96",
+    "storage_bucket": "costmate-58c96.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:419867456944:android:7fe7ed5248d68ab3871275",
+        "android_client_info": {
+          "package_name": "com.example.costmate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBWnw5mgWbtKPukEEcOaYUWMQ2MQOti0CE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
