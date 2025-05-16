@@ -1,21 +1,21 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/auth/auth_service.dart';
 import 'package:costmate/auth/signin_screen.dart';
+import 'package:costmate/providers/user_info_provider.dart';
 import 'package:costmate/screens/group_screen.dart';
 import 'package:costmate/screens/myhome_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends ConsumerStatefulWidget {
   const MainScreen({super.key});
 
   @override
-  _MainScreenState createState() => _MainScreenState();
+  ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends ConsumerState<MainScreen> {
   AppBar _currentAppBar = AppBar(title: Text('Home')); // Default AppBar
   String name = '';
   String email = '';
@@ -46,12 +46,12 @@ class _MainScreenState extends State<MainScreen> {
       GroupScreen(onUpdateAppBar: _updateAppBar),
     ];
 
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      if (user != null) {
-        _getUserInfo(user);
-        _loadCreatedAndJoinedGroups(user.uid);
-      }
-    });
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      Future.microtask(() {
+        ref.read(userInfoProvider.notifier).loadUserData(user);
+      });
+    }
   }
 
   void _onGroupTap(Map<String, dynamic> group) {
@@ -77,90 +77,6 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _currentAppBar = appBar;
     });
-  }
-
-  Future<void> _getUserInfo(User user) async {
-    try {
-      DocumentSnapshot userDoc =
-          await FirebaseFirestore.instance
-              .collection("users")
-              .doc(user.uid)
-              .get();
-
-      if (userDoc.exists && userDoc.data() != null) {
-        setState(() {
-          name = userDoc["name"] ?? user.displayName ?? "No Name";
-          email = userDoc["email"] ?? user.email ?? "No Email";
-          photoURL = userDoc["photoURL"] ?? user.photoURL ?? "";
-        });
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print("Error fetching user info: $e");
-      }
-    }
-  }
-
-  Future<void> _loadCreatedAndJoinedGroups(String userId) async {
-    try {
-      final createdSnapshot =
-          await FirebaseFirestore.instance
-              .collection('groups')
-              .where('createdBy', isEqualTo: userId)
-              .get();
-
-      List<Map<String, dynamic>> created =
-          createdSnapshot.docs.map((doc) {
-            return {
-              'groupId': doc.id,
-              'groupName': doc['groupName'],
-              'isAdmin': true,
-            };
-          }).toList();
-
-      List<String> createdIds =
-          created.map((g) => g['groupId'] as String).toList();
-
-      // Groups where the user is a member (search in top-level groupmembers collection)
-      final joinedSnapshot =
-          await FirebaseFirestore.instance
-              .collection('groupmembers')
-              .where('userId', isEqualTo: userId)
-              .get();
-
-      List<Map<String, dynamic>> joined = [];
-
-      for (var doc in joinedSnapshot.docs) {
-        final groupId = doc['groupId'] as String;
-
-        if (createdIds.contains(groupId)) continue;
-
-        final groupDoc =
-            await FirebaseFirestore.instance
-                .collection('groups')
-                .doc(groupId)
-                .get();
-
-        if (!groupDoc.exists) continue;
-
-        joined.add({
-          'groupId': groupId,
-          'groupName': groupDoc['groupName'],
-          'isAdmin': false,
-        });
-      }
-
-      setState(() {
-        createdGroups = created;
-        joinedGroups = joined;
-        _isCreatedExpanded = true; // Automatically expand to see groups
-        _isJoinedExpanded = true;
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        print("Error loading groups: $e");
-      }
-    }
   }
 
   void _logout() async {
@@ -200,6 +116,14 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userInfo = ref.watch(userInfoProvider);
+
+    name = userInfo.name;
+    email = userInfo.email;
+    photoURL = userInfo.photoURL;
+    createdGroups = userInfo.createdGroups;
+    joinedGroups = userInfo.joinedGroups;
+
     bool hasCreatedGroups = createdGroups.isNotEmpty;
     bool hasJoinedGroups = joinedGroups.isNotEmpty;
 

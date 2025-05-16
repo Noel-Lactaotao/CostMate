@@ -1,13 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:costmate/providers/user_group_provider.dart';
 import 'package:costmate/providers/user_info_provider.dart';
-import 'package:costmate/screens/main_screen.dart';
 import 'package:costmate/validation/validation_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MyHomeScreen extends StatefulWidget {
+class MyHomeScreen extends ConsumerStatefulWidget {
   const MyHomeScreen({
     super.key,
     required this.onUpdateAppBar,
@@ -18,13 +18,12 @@ class MyHomeScreen extends StatefulWidget {
   final void Function(Map<String, dynamic> group) onGroupTap;
 
   @override
-  State<MyHomeScreen> createState() => _MyHomeScreenState();
+  ConsumerState<MyHomeScreen> createState() => _MyHomeScreenState();
 }
 
-class _MyHomeScreenState extends State<MyHomeScreen> {
+class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
   final TextEditingController groupCodeController = TextEditingController();
   final TextEditingController groupNameController = TextEditingController();
-  late Future<List<Map<String, dynamic>>> userGroupsFuture;
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
   Map<String, dynamic>? _selectedGroup;
 
@@ -58,81 +57,6 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
         ),
       );
     });
-
-    userGroupsFuture = _fetchUserGroups();
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchUserGroups() async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user == null) return [];
-
-    final List<Map<String, dynamic>> groups = [];
-    final firestore = FirebaseFirestore.instance;
-
-    // Fetch groups created by the user
-    final created =
-        await firestore
-            .collection('groups')
-            .where('createdBy', isEqualTo: user.uid)
-            .get();
-
-    for (var doc in created.docs) {
-      final data = doc.data();
-
-      // Count members in groupmembers collection where groupId == doc.id
-      final memberCountSnap =
-          await firestore
-              .collection('groupmembers')
-              .where('groupId', isEqualTo: doc.id)
-              .get();
-
-      groups.add({
-        'groupId': doc.id,
-        'groupName': data['groupName'] ?? 'Unnamed',
-        'isAdmin': true,
-        'adminName': 'You',
-        'memberCount': memberCountSnap.size,
-        'role': 'Admin',
-      });
-    }
-
-    // Find groups where the user is a member (search in top-level groupmembers)
-    final memberGroupsSnap =
-        await firestore
-            .collection('groupmembers')
-            .where('userId', isEqualTo: user.uid)
-            .get();
-
-    for (var memberDoc in memberGroupsSnap.docs) {
-      final groupId = memberDoc['groupId'];
-
-      // Skip groups already added (created by user)
-      if (groups.any((g) => g['groupId'] == groupId)) continue;
-
-      final groupDoc = await firestore.collection('groups').doc(groupId).get();
-
-      if (!groupDoc.exists) continue; // Safety check
-
-      final groupData = groupDoc.data()!;
-
-      // Count members in this group
-      final memberCountSnap =
-          await firestore
-              .collection('groupmembers')
-              .where('groupId', isEqualTo: groupId)
-              .get();
-
-      groups.add({
-        'groupId': groupId,
-        'groupName': groupData['groupName'] ?? 'Unnamed',
-        'isAdmin': false,
-        'adminName': groupData['createdByName'] ?? 'Unknown',
-        'memberCount': memberCountSnap.size,
-        'role': memberDoc['role'] ?? 'Member',
-      });
-    }
-
-    return groups;
   }
 
   void _onMenuSelected(String choice) {
@@ -165,19 +89,25 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
                   groupName: groupNameController.text.trim(),
                 );
                 if (groupId != null) {
+                  // Refresh userInfoProvider
+                  final container = ProviderScope.containerOf(
+                    context,
+                    listen: false,
+                  );
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    await container
+                        .read(userInfoProvider.notifier)
+                        .loadUserData(user);
+                  }
+
+                  final _ = ref.refresh(userGroupsProvider);
+
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Group Created")),
                   );
-                  // Navigate to MyHomeScreen and replace current screen:
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => MainScreen()),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Error creating group")),
-                  );
                 }
+
                 groupNameController.clear();
               },
               child: const Text("Create"),
@@ -207,24 +137,30 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
             ),
             TextButton(
               onPressed: () async {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close dialog first
                 final groupId = await ValidationService().joinGroup(
                   groupCode: groupCodeController.text.trim(),
                 );
                 if (groupId != null) {
-                  ScaffoldMessenger.of(
+                  // Refresh userInfoProvider
+                  final container = ProviderScope.containerOf(
                     context,
-                  ).showSnackBar(const SnackBar(content: Text("Joined Group")));
-
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => MainScreen()),
+                    listen: false,
                   );
-                } else {
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    await container
+                        .read(userInfoProvider.notifier)
+                        .loadUserData(user);
+                  }
+
+                  final _ = ref.refresh(userGroupsProvider);
+
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Error joining group")),
+                    const SnackBar(content: Text("Joined Group")),
                   );
                 }
+
                 groupCodeController.clear();
               },
               child: const Text("Join"),
@@ -249,105 +185,6 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
     } else if (choice == 'View Group Code') {
       _showViewGroupCodeDialog();
     }
-  }
-
-  void _showLeaveGroupDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Leave Group'),
-            content: const Text('Are you sure you want to leave this group?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context), // Cancel
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _leaveGroup();
-                },
-                child: const Text('Leave'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _showDeleteGroupDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Group'),
-            content: const Text(
-              'This action is irreversible. Delete this group?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _deleteGroup();
-
-                  setState(() {
-                    userGroupsFuture =
-                        _fetchUserGroups(); // refresh after deletion
-                  });
-
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => MainScreen()),
-                  );
-                },
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _showEditGroupDialog() {
-    final TextEditingController groupNameController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Edit Group Name'),
-            content: TextField(
-              controller: groupNameController,
-              decoration: const InputDecoration(
-                labelText: 'Enter New Group Name',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final newGroupName = groupNameController.text.trim();
-                  if (newGroupName.isNotEmpty) {
-                    Navigator.pop(context); // Close the dialog
-                    _editGroup(newGroupName); // Update group name
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => MainScreen()),
-                    );
-                  }
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          ),
-    );
   }
 
   void _showViewGroupCodeDialog() async {
@@ -411,6 +248,99 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
     }
   }
 
+  void _showLeaveGroupDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Leave Group'),
+            content: const Text('Are you sure you want to leave this group?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context), // Cancel
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _leaveGroup();
+                },
+                child: const Text('Leave'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showDeleteGroupDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Group'),
+            content: const Text(
+              'This action is irreversible. Delete this group?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await _deleteGroup();
+
+                  // Invalidate userGroupProvider instead of setState
+                  final container = ProviderScope.containerOf(
+                    context,
+                    listen: false,
+                  );
+                  container.invalidate(userGroupsProvider);
+                },
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showEditGroupDialog() {
+    final TextEditingController groupNameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Edit Group Name'),
+            content: TextField(
+              controller: groupNameController,
+              decoration: const InputDecoration(
+                labelText: 'Enter New Group Name',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final newGroupName = groupNameController.text.trim();
+                  if (newGroupName.isNotEmpty) {
+                    Navigator.pop(context); // Close the dialog
+                    await _editGroup(newGroupName); // Update group name
+                    // NO navigation here anymore
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+    );
+  }
+
   void _leaveGroup() async {
     try {
       final groupId = _selectedGroup?['groupId'];
@@ -428,24 +358,19 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
           await doc.reference.delete();
         }
 
-        // ✅ Refresh userInfoProvider
         final container = ProviderScope.containerOf(context, listen: false);
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          container.read(userInfoProvider.notifier).loadUserData(user);
+          await container.read(userInfoProvider.notifier).loadUserData(user);
         }
+
+        container.invalidate(userGroupsProvider); // Refresh group list
 
         if (!context.mounted) return;
 
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('You left the group.')));
-
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-          (route) => false,
-        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('You are not a member of this group.')),
@@ -465,16 +390,20 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
 
       await ValidationService().deleteGroupWithSubcollections(groupId);
 
-      // ✅ Refresh userInfoProvider
+      // Refresh userInfoProvider
       final container = ProviderScope.containerOf(context, listen: false);
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        container.read(userInfoProvider.notifier).loadUserData(user);
+        await container.read(userInfoProvider.notifier).loadUserData(user);
       }
+
+      container.invalidate(userGroupsProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Group deleted successfully.')),
       );
+
+      // NO navigation here anymore
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -482,7 +411,7 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
     }
   }
 
-  void _editGroup(String newName) async {
+  Future<void> _editGroup(String newName) async {
     try {
       final groupId = _selectedGroup?['groupId'];
       if (groupId == null) return;
@@ -490,15 +419,15 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
       final groupRef = FirebaseFirestore.instance
           .collection('groups')
           .doc(groupId);
-
       await groupRef.update({'groupName': newName});
 
-      // ✅ Refresh userInfoProvider
       final container = ProviderScope.containerOf(context, listen: false);
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        container.read(userInfoProvider.notifier).loadUserData(user);
+        await container.read(userInfoProvider.notifier).loadUserData(user);
       }
+
+      container.invalidate(userGroupsProvider); // Refresh group list
 
       ScaffoldMessenger.of(
         context,
@@ -512,20 +441,15 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final groupsAsync = ref.watch(userGroupsProvider);
+
     return Padding(
       padding: const EdgeInsets.all(15),
-      child: FutureBuilder<List<Map<String, dynamic>>>(
-        future: userGroupsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+      child: groupsAsync.when(
+        data: (groups) {
+          if (groups.isEmpty) {
             return const Center(child: Text("You're not in any group."));
           }
-
-          final groups = snapshot.data!;
 
           return SingleChildScrollView(
             child: Center(
@@ -542,7 +466,6 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
                             'isAdmin': group['isAdmin'],
                           });
                         },
-
                         child: Stack(
                           children: [
                             Container(
@@ -600,21 +523,20 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
                                         value: 'Leave Group',
                                         child: Text('Leave Group'),
                                       ),
-                                    if (group['isAdmin'])
+                                    if (group['isAdmin']) ...[
                                       const PopupMenuItem<String>(
                                         value: 'Edit Group',
                                         child: Text('Edit Group'),
                                       ),
-                                    if (group['isAdmin'])
                                       const PopupMenuItem<String>(
                                         value: 'Delete Group',
                                         child: Text('Delete Group'),
                                       ),
-                                    if (group['isAdmin'])
                                       const PopupMenuItem<String>(
                                         value: 'View Group Code',
                                         child: Text('View Group Code'),
                                       ),
+                                    ],
                                   ];
                                 },
                               ),
@@ -627,6 +549,8 @@ class _MyHomeScreenState extends State<MyHomeScreen> {
             ),
           );
         },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text("Error: $err")),
       ),
     );
   }
