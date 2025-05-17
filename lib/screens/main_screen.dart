@@ -1,9 +1,8 @@
 import 'package:costmate/auth/auth_service.dart';
 import 'package:costmate/auth/signin_screen.dart';
-import 'package:costmate/providers/user_info_provider.dart';
+import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/screens/group_screen.dart';
 import 'package:costmate/screens/myhome_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,13 +44,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       MyHomeScreen(onUpdateAppBar: _updateAppBar, onGroupTap: _onGroupTap),
       GroupScreen(onUpdateAppBar: _updateAppBar),
     ];
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      Future.microtask(() {
-        ref.read(userInfoProvider.notifier).loadUserData(user);
-      });
-    }
   }
 
   void _onGroupTap(Map<String, dynamic> group) {
@@ -116,230 +108,237 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userInfo = ref.watch(userInfoProvider);
+    final userInfoAsync = ref.watch(userInfoProvider);
 
-    name = userInfo.name;
-    email = userInfo.email;
-    photoURL = userInfo.photoURL;
-    createdGroups = userInfo.createdGroups;
-    joinedGroups = userInfo.joinedGroups;
+    return userInfoAsync.when(
+      data: (userInfo) {
+        final name = userInfo.name;
+        final email = userInfo.email;
+        final photoURL = userInfo.photoURL;
+        final createdGroups = userInfo.createdGroups;
+        final joinedGroups = userInfo.joinedGroups;
 
-    bool hasCreatedGroups = createdGroups.isNotEmpty;
-    bool hasJoinedGroups = joinedGroups.isNotEmpty;
+        final bool hasCreatedGroups = createdGroups.isNotEmpty;
+        final bool hasJoinedGroups = joinedGroups.isNotEmpty;
 
-    return Scaffold(
-      drawer: Drawer(
-        child: Column(
-          children: [
-            // Scrollable content
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  Container(
-                    height: 250,
-                    color: Colors.green,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.grey[200],
-                          child:
-                              (photoURL != null && photoURL!.isNotEmpty)
-                                  ? ClipOval(
-                                    child: CachedNetworkImage(
-                                      imageUrl: photoURL!,
-                                      width: 80,
-                                      height: 80,
-                                      fit: BoxFit.cover,
-                                      placeholder:
-                                          (context, url) =>
-                                              CircularProgressIndicator(),
-                                      errorWidget:
-                                          (context, url, error) =>
-                                              Icon(Icons.person, size: 40),
-                                    ),
-                                  )
-                                  : Icon(Icons.person, size: 40),
+        return Scaffold(
+          drawer: Drawer(
+            child: Column(
+              children: [
+                // Scrollable content
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      Container(
+                        height: 250,
+                        color: Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundColor: Colors.grey[200],
+                              child:
+                                  (photoURL.isNotEmpty)
+                                      ? ClipOval(
+                                        child: CachedNetworkImage(
+                                          imageUrl: photoURL,
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                          placeholder:
+                                              (context, url) =>
+                                                  CircularProgressIndicator(),
+                                          errorWidget:
+                                              (context, url, error) =>
+                                                  Icon(Icons.person, size: 40),
+                                        ),
+                                      )
+                                      : Icon(Icons.person, size: 40),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            Text(email, style: const TextStyle(fontSize: 14)),
+                          ],
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                      ),
+
+                      ListTile(
+                        leading: const Icon(Icons.home),
+                        title: const Text('Home'),
+                        selected: _selectedDrawerItem == 'Home',
+                        selectedTileColor: Colors.green.shade100,
+                        onTap: () {
+                          setState(() {
+                            _selectedIndex = 0;
+                            _selectedDrawerItem = 'Home';
+                            _selectedDrawerGroupId = null;
+                          });
+                          Navigator.pop(context);
+                        },
+                      ),
+
+                      if (hasCreatedGroups)
+                        ListTile(
+                          leading: const Icon(Icons.group),
+                          title: const Text('Created Groups'),
+                          trailing: Icon(
+                            _isCreatedExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _isCreatedExpanded = !_isCreatedExpanded;
+                            });
+                          },
+                        ),
+                      if (_isCreatedExpanded)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16.0),
+                          child: Column(
+                            children:
+                                createdGroups.map((group) {
+                                  final bool isSelected =
+                                      _selectedDrawerGroupId ==
+                                      group['groupId'];
+
+                                  return ListTile(
+                                    title: Text(group['groupName']),
+                                    selected: isSelected,
+                                    selectedTileColor: Colors.green.shade100,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedIndex = 1;
+                                        _selectedDrawerGroupId =
+                                            group['groupId'];
+                                        _selectedDrawerItem = '';
+                                        selectedGroupId = group['groupId'];
+                                        selectedGroupName = group['groupName'];
+                                        isSelectedAdmin = group['isAdmin'];
+
+                                        _screens[1] = GroupScreen(
+                                          key: ValueKey(selectedGroupId),
+                                          onUpdateAppBar: _updateAppBar,
+                                          groupId: selectedGroupId,
+                                          groupName: selectedGroupName,
+                                          isAdmin: isSelectedAdmin,
+                                        );
+                                      });
+                                      Navigator.pop(context);
+                                    },
+                                  );
+                                }).toList(),
                           ),
                         ),
-                        Text(email, style: const TextStyle(fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.home),
-                    title: const Text('Home'),
-                    selected: _selectedDrawerItem == 'Home',
-                    selectedTileColor: Colors.green.shade100,
-                    onTap: () {
-                      setState(() {
-                        _selectedIndex = 0;
-                        _selectedDrawerItem = 'Home';
-                        _selectedDrawerGroupId = null; // ✅ Deselect group
-                      });
-                      Navigator.pop(context);
-                    },
-                  ),
+                      if (hasCreatedGroups && _isCreatedExpanded)
+                        const Divider(height: 5),
 
-                  if (hasCreatedGroups)
-                    ListTile(
-                      leading: const Icon(Icons.group),
-                      title: const Text('Created Groups'),
-                      trailing: Icon(
-                        _isCreatedExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                      if (hasJoinedGroups)
+                        ListTile(
+                          leading: const Icon(Icons.group),
+                          title: const Text('Joined Groups'),
+                          trailing: Icon(
+                            _isJoinedExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                          ),
+                          onTap: () {
+                            setState(() {
+                              _isJoinedExpanded = !_isJoinedExpanded;
+                            });
+                          },
+                        ),
+                      if (_isJoinedExpanded)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16.0),
+                          child: Column(
+                            children:
+                                joinedGroups.map((group) {
+                                  final bool isSelected =
+                                      _selectedDrawerGroupId ==
+                                      group['groupId'];
+
+                                  return ListTile(
+                                    title: Text(group['groupName']),
+                                    selected: isSelected,
+                                    selectedTileColor: Colors.green.shade100,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedIndex = 1;
+                                        _selectedDrawerGroupId =
+                                            group['groupId'];
+                                        _selectedDrawerItem = '';
+                                        selectedGroupId = group['groupId'];
+                                        selectedGroupName = group['groupName'];
+                                        isSelectedAdmin = group['isAdmin'];
+
+                                        _screens[1] = GroupScreen(
+                                          key: ValueKey(selectedGroupId),
+                                          onUpdateAppBar: _updateAppBar,
+                                          groupId: selectedGroupId,
+                                          groupName: selectedGroupName,
+                                          isAdmin: isSelectedAdmin,
+                                        );
+                                      });
+                                      Navigator.pop(context);
+                                    },
+                                  );
+                                }).toList(),
+                          ),
+                        ),
+                      if (hasJoinedGroups && _isJoinedExpanded)
+                        const Divider(height: 5),
+
+                      const ListTile(
+                        leading: Icon(Icons.feedback),
+                        title: Text('Feedback'),
                       ),
-                      onTap: () {
-                        setState(() {
-                          _isCreatedExpanded = !_isCreatedExpanded;
-                        });
-                      },
-                    ),
-                  if (_isCreatedExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16.0),
-                      child: Column(
-                        children:
-                            createdGroups.map((group) {
-                              final bool isSelected =
-                                  _selectedDrawerGroupId ==
-                                  group['groupId']; // ✅ FIXED
-
-                              return ListTile(
-                                title: Text(group['groupName']),
-                                selected: isSelected,
-                                selectedTileColor: Colors.green.shade100,
-                                onTap: () {
-                                  setState(() {
-                                    _selectedIndex = 1;
-                                    _selectedDrawerGroupId = group['groupId'];
-                                    _selectedDrawerItem = '';
-                                    selectedGroupId = group['groupId'];
-                                    selectedGroupName = group['groupName'];
-                                    isSelectedAdmin = group['isAdmin'];
-
-                                    // Update the _screens[1] with new GroupScreen
-                                    _screens[1] = GroupScreen(
-                                      key: ValueKey(selectedGroupId),
-                                      onUpdateAppBar: _updateAppBar,
-                                      groupId: selectedGroupId,
-                                      groupName: selectedGroupName,
-                                      isAdmin: isSelectedAdmin,
-                                    );
-                                  });
-                                  Navigator.pop(context); // Close drawer
-                                },
-                              );
-                            }).toList(),
+                      const ListTile(
+                        leading: Icon(Icons.notifications),
+                        title: Text('Notification'),
                       ),
-                    ),
-                  if (hasCreatedGroups && _isCreatedExpanded)
-                    const Divider(height: 5),
-
-                  if (hasJoinedGroups)
-                    ListTile(
-                      leading: const Icon(Icons.group),
-                      title: const Text('Joined Groups'),
-                      trailing: Icon(
-                        _isJoinedExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
+                      const ListTile(
+                        leading: Icon(Icons.settings),
+                        title: Text('Settings'),
                       ),
-                      onTap: () {
-                        setState(() {
-                          _isJoinedExpanded = !_isJoinedExpanded;
-                        });
-                      },
-                    ),
-                  if (_isJoinedExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16.0),
-                      child: Column(
-                        children:
-                            joinedGroups.map((group) {
-                              final bool isSelected =
-                                  _selectedDrawerGroupId ==
-                                  group['groupId']; // ✅ FIXED
-
-                              return ListTile(
-                                title: Text(group['groupName']),
-                                selected: isSelected,
-                                selectedTileColor: Colors.green.shade100,
-                                onTap: () {
-                                  setState(() {
-                                    _selectedIndex = 1;
-                                    _selectedDrawerGroupId = group['groupId'];
-                                    _selectedDrawerItem = '';
-                                    selectedGroupId = group['groupId'];
-                                    selectedGroupName = group['groupName'];
-                                    isSelectedAdmin = group['isAdmin'];
-
-                                    // Update the _screens[1] with new GroupScreen
-                                    _screens[1] = GroupScreen(
-                                      key: ValueKey(selectedGroupId),
-                                      onUpdateAppBar: _updateAppBar,
-                                      groupId: selectedGroupId,
-                                      groupName: selectedGroupName,
-                                      isAdmin: isSelectedAdmin,
-                                    );
-                                  });
-                                  Navigator.pop(context); // Close drawer
-                                },
-                              );
-                            }).toList(),
-                      ),
-                    ),
-                  if (hasJoinedGroups && _isJoinedExpanded)
-                    const Divider(height: 5),
-
-                  const ListTile(
-                    leading: Icon(Icons.feedback),
-                    title: Text('Feedback'),
+                    ],
                   ),
-                  const ListTile(
-                    leading: Icon(Icons.notifications),
-                    title: Text('Notification'),
-                  ),
-                  const ListTile(
-                    leading: Icon(Icons.settings),
-                    title: Text('Settings'),
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton.icon(
-                onPressed: _showLogoutConfirmation,
-                icon: const Icon(Icons.logout),
-                label: const Text('Logout'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  minimumSize: const Size.fromHeight(45),
                 ),
-              ),
+
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ElevatedButton.icon(
+                    onPressed: _showLogoutConfirmation,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Logout'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      minimumSize: const Size.fromHeight(45),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      appBar: _currentAppBar,
-      body: _screens[_selectedIndex],
+          ),
+          appBar: _currentAppBar,
+          body: _screens[_selectedIndex],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stackTrace) => Center(child: Text('Error: $error')),
     );
   }
 }

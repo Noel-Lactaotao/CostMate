@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:costmate/providers/user_group_provider.dart';
-import 'package:costmate/providers/user_info_provider.dart';
+import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/validation/validation_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -89,19 +88,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                   groupName: groupNameController.text.trim(),
                 );
                 if (groupId != null) {
-                  // Refresh userInfoProvider
-                  final container = ProviderScope.containerOf(
-                    context,
-                    listen: false,
-                  );
                   final user = FirebaseAuth.instance.currentUser;
                   if (user != null) {
-                    await container
-                        .read(userInfoProvider.notifier)
-                        .loadUserData(user);
+                    final _ = ref.refresh(userInfoProvider);
+                    final _ = ref.refresh(userGroupsProvider);
                   }
-
-                  final _ = ref.refresh(userGroupsProvider);
 
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Group Created")),
@@ -142,23 +133,15 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                   groupCode: groupCodeController.text.trim(),
                 );
                 if (groupId != null) {
-                  // Refresh userInfoProvider
-                  final container = ProviderScope.containerOf(
-                    context,
-                    listen: false,
-                  );
                   final user = FirebaseAuth.instance.currentUser;
                   if (user != null) {
-                    await container
-                        .read(userInfoProvider.notifier)
-                        .loadUserData(user);
+                    final _ = ref.refresh(userInfoProvider);
+                    final _ = ref.refresh(userGroupsProvider);
                   }
 
-                  final _ = ref.refresh(userGroupsProvider);
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Joined Group")),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text("Joined Group")));
                 }
 
                 groupCodeController.clear();
@@ -291,13 +274,6 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                 onPressed: () async {
                   Navigator.pop(context);
                   await _deleteGroup();
-
-                  // Invalidate userGroupProvider instead of setState
-                  final container = ProviderScope.containerOf(
-                    context,
-                    listen: false,
-                  );
-                  container.invalidate(userGroupsProvider);
                 },
                 child: const Text('Delete'),
               ),
@@ -358,13 +334,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
           await doc.reference.delete();
         }
 
-        final container = ProviderScope.containerOf(context, listen: false);
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          await container.read(userInfoProvider.notifier).loadUserData(user);
+          final _ = ref.refresh(userInfoProvider);
+          final _ = ref.refresh(userGroupsProvider);
         }
-
-        container.invalidate(userGroupsProvider); // Refresh group list
 
         if (!context.mounted) return;
 
@@ -391,13 +365,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
       await ValidationService().deleteGroupWithSubcollections(groupId);
 
       // Refresh userInfoProvider
-      final container = ProviderScope.containerOf(context, listen: false);
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await container.read(userInfoProvider.notifier).loadUserData(user);
+        final _ = ref.refresh(userInfoProvider);
+        final _ = ref.refresh(userGroupsProvider);
       }
-
-      container.invalidate(userGroupsProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Group deleted successfully.')),
@@ -421,13 +393,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
           .doc(groupId);
       await groupRef.update({'groupName': newName});
 
-      final container = ProviderScope.containerOf(context, listen: false);
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await container.read(userInfoProvider.notifier).loadUserData(user);
+        final _ = ref.refresh(userInfoProvider);
+        final _ = ref.refresh(userGroupsProvider);
       }
-
-      container.invalidate(userGroupsProvider); // Refresh group list
 
       ScaffoldMessenger.of(
         context,
