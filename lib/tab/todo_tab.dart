@@ -18,7 +18,7 @@ class TodoTab extends ConsumerStatefulWidget {
 
 class _TodoTabState extends ConsumerState<TodoTab> {
   final Map<String, String> _userIdToName = {};
-  final Map<String, bool> _groupIdToIsAdmin = {};
+  // final Map<String, bool> _groupIdToIsAdmin = {};
   late List<Map<String, dynamic>> _filteredTodo = [];
   String _sortOption = 'Newest';
   String _statusFilter = 'Pending';
@@ -38,7 +38,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
       _sortOption = prefs.getString('todoSortOption') ?? 'Newest';
       _statusFilter = prefs.getString('todoStatusFilter') ?? 'Pending';
     });
-    _applyFilters(ref); // ✅ pass ref here
+    _applyFilters(ref, widget.groupId); // ✅ pass ref here
   }
 
   String _formatDueDate(DateTime date) {
@@ -298,34 +298,38 @@ class _TodoTabState extends ConsumerState<TodoTab> {
     );
   }
 
-  void _applyFilters(WidgetRef ref) {
-    final todoList = ref.read(
-      todoProvider as ProviderListenable,
-    ); // ⬅️ get todo list from provider
+  void _applyFilters(WidgetRef ref, String groupId) {
+    final todosAsync = ref.read(todoProvider(groupId));
 
-    setState(() {
-      _filteredTodo =
-          todoList.where((todo) {
+    todosAsync.whenData((todosList) {
+      // Convert to list for sorting
+      List<Map<String, dynamic>> filtered =
+          todosList.where((todo) {
             final createdAt = (todo['createdAt'] as Timestamp?)?.toDate();
             final status = todo['status'] ?? 'Pending';
-            return createdAt != null && status == _statusFilter;
+
+            if (createdAt == null) return false;
+            if (status != _statusFilter) return false;
+
+            return true;
           }).toList();
 
+      // Sort the filtered list
       if (_sortOption == 'Newest') {
-        _filteredTodo.sort((a, b) {
+        filtered.sort((a, b) {
           final aDate = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime(0);
           final bDate = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime(0);
           return bDate.compareTo(aDate);
         });
       } else if (_sortOption == 'Oldest') {
-        _filteredTodo.sort((a, b) {
+        filtered.sort((a, b) {
           final aDate = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime(0);
           final bDate = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime(0);
           return aDate.compareTo(bDate);
         });
       } else if (_sortOption == 'Closest Due Date') {
         final now = DateTime.now();
-        _filteredTodo.sort((a, b) {
+        filtered.sort((a, b) {
           final aDue = (a['dueDate'] as Timestamp?)?.toDate() ?? DateTime(2100);
           final bDue = (b['dueDate'] as Timestamp?)?.toDate() ?? DateTime(2100);
           return aDue
@@ -334,6 +338,10 @@ class _TodoTabState extends ConsumerState<TodoTab> {
               .compareTo(bDue.difference(now).abs());
         });
       }
+
+      setState(() {
+        _filteredTodo = filtered;
+      });
     });
   }
 
@@ -389,7 +397,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                 setState(() {
                   _sortOption = tempSort;
                   _statusFilter = tempApproval;
-                  _applyFilters(ref);
+                  _applyFilters(ref, widget.groupId);
                 });
 
                 Navigator.of(context).pop();
@@ -406,18 +414,18 @@ class _TodoTabState extends ConsumerState<TodoTab> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 600;
 
-    // Listen to the todoProvider for the given groupId
     final todoAsyncValue = ref.watch(todoProvider(widget.groupId));
 
-    // Handle loading, error, and data states
     return todoAsyncValue.when(
-      data: (todoList) {
+      data: (todosList) {
         // Update loading state & filtered list
         isLoading = false;
-        _filteredTodo = todoList;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _applyFilters(ref, widget.groupId);
+        });
 
         // Optionally, update caches if needed:
-        for (var todo in todoList) {
+        for (var todo in todosList) {
           final createdById = todo['createdBy'] as String?;
           final createdByName = todo['createdByName'] as String? ?? 'Unknown';
           if (createdById != null) {
@@ -425,9 +433,9 @@ class _TodoTabState extends ConsumerState<TodoTab> {
           }
 
           // Cache user role to bool for example
-          final role = todo['currentUserRole'] as String? ?? 'Member';
-          _groupIdToIsAdmin[widget.groupId] =
-              (role == 'Admin' || role == 'Owner');
+          // final role = todo['currentUserRole'] as String? ?? 'Member';
+          // _groupIdToIsAdmin[widget.groupId] =
+          //     (role == 'Admin' || role == 'Owner');
         }
 
         return Center(
@@ -459,26 +467,30 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                             itemCount: _filteredTodo.length,
                             itemBuilder: (context, index) {
                               final todo = _filteredTodo[index];
-                              // final createdById = todo['createdBy'] as String?;
+                              final String? createdById = todo['createdBy'];
                               final createdByName =
-                                  todo['createdByName'] ?? 'Unknown';
+                                  _userIdToName[createdById] ?? 'Loading...';
 
                               final dueDate =
                                   (todo['dueDate'] as Timestamp?)?.toDate();
-                              // final groupId = todo['groupId'] as String;
-
-                              // Check if current user is admin for group
+                              final status = todo['status'] ?? 'Pending';
+                              final createdAt =
+                                  (todo['createdAt'] as Timestamp?)?.toDate();
                               final currentUserRole =
-                                  todo['currentUserRole'] ?? 'Member';
-                              final isAdminForGroup =
-                                  currentUserRole == 'Admin' ||
-                                  currentUserRole == 'Owner';
+                                  todo['currentUserRole'] ?? 'member';
+                              final timeAgo =
+                                  createdAt != null
+                                      ? timeago.format(createdAt)
+                                      : 'Unknown';
+
+                              final bool isAdmin =
+                                  currentUserRole == 'admin' ||
+                                  currentUserRole == 'co-admin';
+                              final bool isOwner = createdById == currentUserId;
 
                               final showPopup =
-                                  (todo['status'] == 'Pending' ||
-                                      todo['status'] == 'Done') &&
-                                  (isAdminForGroup ||
-                                      todo['createdBy'] == currentUserId);
+                                  (status == 'Done' && isAdmin) ||
+                                  (status == 'Pending' && (isAdmin || isOwner));
 
                               return Card(
                                 margin: const EdgeInsets.symmetric(vertical: 6),
@@ -515,7 +527,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                                               ),
                                             ),
                                             Text(
-                                              'Added: ${timeago.format((todo['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now())}',
+                                              'Added: $timeAgo',
                                               style: const TextStyle(
                                                 fontSize: 11,
                                                 color: Colors.grey,
@@ -535,35 +547,31 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                                         },
                                       ),
                                     ),
-                                    Positioned(
-                                      top: 0,
-                                      right: 0,
-                                      child:
-                                          showPopup
-                                              ? PopupMenuButton<String>(
-                                                icon: const Icon(
-                                                  Icons.more_vert,
+                                    if (showPopup)
+                                      Positioned(
+                                        top: 0,
+                                        right: 0,
+                                        child: PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert),
+                                          onSelected:
+                                              (choice) => _onMenuSelected(
+                                                choice,
+                                                todo,
+                                                todo['id'],
+                                              ),
+                                          itemBuilder:
+                                              (context) => const [
+                                                PopupMenuItem<String>(
+                                                  value: 'Edit TODO',
+                                                  child: Text('Edit'),
                                                 ),
-                                                onSelected:
-                                                    (choice) => _onMenuSelected(
-                                                      choice,
-                                                      todo,
-                                                      todo['id'],
-                                                    ),
-                                                itemBuilder:
-                                                    (context) => const [
-                                                      PopupMenuItem<String>(
-                                                        value: 'Edit TODO',
-                                                        child: Text('Edit'),
-                                                      ),
-                                                      PopupMenuItem<String>(
-                                                        value: 'Delete TODO',
-                                                        child: Text('Delete'),
-                                                      ),
-                                                    ],
-                                              )
-                                              : const SizedBox.shrink(),
-                                    ),
+                                                PopupMenuItem<String>(
+                                                  value: 'Delete TODO',
+                                                  child: Text('Delete'),
+                                                ),
+                                              ],
+                                        ),
+                                      ),
                                   ],
                                 ),
                               );

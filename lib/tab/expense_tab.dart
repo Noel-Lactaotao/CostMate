@@ -21,7 +21,7 @@ class ExpensesTab extends ConsumerStatefulWidget {
 
 class _ExpensesTabState extends ConsumerState<ExpensesTab> {
   final Map<String, String> _userIdToName = {};
-  final Map<String, bool> _groupIdToIsAdmin = {};
+  // final Map<String, bool> _groupIdToIsAdmin = {};
   List<Map<String, dynamic>> _filteredExpenses = [];
   String _sortOption = 'Newest';
   String _timeRange = 'All';
@@ -43,21 +43,24 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
       _timeRange = prefs.getString('timeRange') ?? 'All';
       _approvalFilter = prefs.getString('approvalFilter') ?? 'Pending';
     });
-    _applyFilters(ref);
+    _applyFilters(ref, widget.groupId);
   }
 
-  void _applyFilters(WidgetRef ref) {
-    final expensesList = ref.read(expensesProvider as ProviderListenable);
+  void _applyFilters(WidgetRef ref, String groupId) {
+    final expensesAsync = ref.read(expensesProvider(groupId));
+
     DateTime now = DateTime.now();
 
-    setState(() {
-      _filteredExpenses =
+    expensesAsync.whenData((expensesList) {
+      final filtered =
           expensesList.where((expense) {
             final createdAt = (expense['createdAt'] as Timestamp?)?.toDate();
             final status = expense['status'] ?? 'Pending';
 
             if (createdAt == null) return false;
-            if (status != _approvalFilter) return false;
+            if (status != _approvalFilter) {
+              return false;
+            }
 
             switch (_timeRange) {
               case 'Week':
@@ -76,7 +79,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
             }
           }).toList();
 
-      _filteredExpenses.sort((a, b) {
+      filtered.sort((a, b) {
         final aDate = (a['createdAt'] as Timestamp?)?.toDate() ?? DateTime(0);
         final bDate = (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime(0);
 
@@ -91,6 +94,10 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
           default:
             return bDate.compareTo(aDate);
         }
+      });
+
+      setState(() {
+        _filteredExpenses = filtered;
       });
     });
   }
@@ -144,9 +151,9 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                   _sortOption = tempSort;
                   _timeRange = tempTime;
                   _approvalFilter = tempApproval;
-                  _applyFilters(ref);
                 });
 
+                _applyFilters(ref, widget.groupId);
                 Navigator.pop(context);
               },
               child: const Text('Apply'),
@@ -172,99 +179,102 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
     );
   }
 
-  void _showYearlyRecordsDialog() {
-    final expensesList = ref.read(expensesProvider as ProviderListenable);
-    final years =
-        expensesList.expenses
-            .map((e) => (e['createdAt'] as Timestamp?)?.toDate().year)
-            .whereType<int>()
-            .toSet()
-            .toList()
-          ..sort((a, b) => b.compareTo(a));
+  void _showYearlyRecordsDialog(WidgetRef ref, String groupId) {
+    final expensesAsync = ref.read(expensesProvider(groupId));
 
-    int selectedYear = years.isNotEmpty ? years.first : DateTime.now().year;
+    expensesAsync.whenData((expensesList) {
+      final years =
+          expensesList
+              .map((e) => (e['createdAt'] as Timestamp?)?.toDate().year)
+              .whereType<int>()
+              .toSet()
+              .toList()
+            ..sort((a, b) => b.compareTo(a));
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final monthlyTotals = {
-              for (int i = 1; i <= 12; i++) _monthName(i): 0.0,
-            };
+      int selectedYear = years.isNotEmpty ? years.first : DateTime.now().year;
 
-            for (var e in expensesList.expenses) {
-              final date = (e['createdAt'] as Timestamp?)?.toDate();
-              if (date != null &&
-                  date.year == selectedYear &&
-                  e['status'] == 'Approved') {
-                monthlyTotals[_monthName(date.month)] =
-                    (monthlyTotals[_monthName(date.month)] ?? 0.0) +
-                    (e['expenseAmount'] ?? 0.0);
+      showDialog(
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+            builder: (context, setState) {
+              final monthlyTotals = {
+                for (int i = 1; i <= 12; i++) _monthName(i): 0.0,
+              };
+
+              for (var e in expensesList) {
+                final date = (e['createdAt'] as Timestamp?)?.toDate();
+                if (date != null &&
+                    date.year == selectedYear &&
+                    e['status'] == 'Approved') {
+                  monthlyTotals[_monthName(date.month)] =
+                      (monthlyTotals[_monthName(date.month)] ?? 0.0) +
+                      (e['expenseAmount'] ?? 0.0);
+                }
               }
-            }
 
-            final total = monthlyTotals.values.fold(0.0, (a, b) => a + b);
+              final total = monthlyTotals.values.fold(0.0, (a, b) => a + b);
 
-            return AlertDialog(
-              title: const Text(
-                'Monthly Totals by Year',
-                textAlign: TextAlign.center,
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<int>(
-                      value: selectedYear,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Year',
+              return AlertDialog(
+                title: const Text(
+                  'Monthly Totals by Year',
+                  textAlign: TextAlign.center,
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<int>(
+                        value: selectedYear,
+                        decoration: const InputDecoration(
+                          labelText: 'Select Year',
+                        ),
+                        items:
+                            years
+                                .map(
+                                  (y) => DropdownMenuItem(
+                                    value: y,
+                                    child: Text('$y'),
+                                  ),
+                                )
+                                .toList(),
+                        onChanged: (val) => setState(() => selectedYear = val!),
                       ),
-                      items:
-                          years
-                              .map(
-                                (y) => DropdownMenuItem(
-                                  value: y,
-                                  child: Text('$y'),
-                                ),
-                              )
-                              .toList(),
-                      onChanged: (val) => setState(() => selectedYear = val!),
-                    ),
-                    const SizedBox(height: 16),
-                    ...monthlyTotals.entries.map(
-                      (entry) => ListTile(
+                      const SizedBox(height: 16),
+                      ...monthlyTotals.entries.map(
+                        (entry) => ListTile(
+                          dense: true,
+                          title: Text(entry.key),
+                          trailing: Text('₱${entry.value.toStringAsFixed(2)}'),
+                        ),
+                      ),
+                      const Divider(),
+                      ListTile(
                         dense: true,
-                        title: Text(entry.key),
-                        trailing: Text('₱${entry.value.toStringAsFixed(2)}'),
+                        title: const Text(
+                          'Total',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        trailing: Text(
+                          '₱${total.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                    const Divider(),
-                    ListTile(
-                      dense: true,
-                      title: const Text(
-                        'Total',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      trailing: Text(
-                        '₱${total.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    });
   }
 
   String _monthName(int month) {
@@ -485,36 +495,6 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
     );
   }
 
-  void _showDeleteExpenseDialog({
-    required String expenseId,
-    required String title,
-  }) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Delete Expense'),
-            content: Text('Are you sure you want to delete "$title"?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await FirebaseFirestore.instance
-                      .collection('expenses')
-                      .doc(expenseId)
-                      .delete();
-                  Navigator.pop(context);
-                },
-                child: Text('Delete', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-    );
-  }
-
   Future<void> updateExpense({
     required String expenseId,
     required String title,
@@ -556,6 +536,36 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
     }
   }
 
+  void _showDeleteExpenseDialog({
+    required String expenseId,
+    required String title,
+  }) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Delete Expense'),
+            content: Text('Are you sure you want to delete "$title"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await FirebaseFirestore.instance
+                      .collection('expenses')
+                      .doc(expenseId)
+                      .delete();
+                  Navigator.pop(context);
+                },
+                child: Text('Delete', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 600;
@@ -567,7 +577,9 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
       data: (expenseList) {
         // Update loading state & filtered list
         isLoading = false;
-        _filteredExpenses = expenseList;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _applyFilters(ref, widget.groupId);
+        });
 
         // Optionally, update caches if needed:
         for (var expense in expenseList) {
@@ -579,9 +591,9 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
           }
 
           // Cache user role to bool for example
-          final role = expense['currentUserRole'] as String? ?? 'Member';
-          _groupIdToIsAdmin[widget.groupId] =
-              (role == 'Admin' || role == 'Owner');
+          // final role = expense['currentUserRole'] as String? ?? 'Member';
+          // _groupIdToIsAdmin[widget.groupId] =
+          //     (role == 'Admin' || role == 'Owner');
         }
 
         return Center(
@@ -608,7 +620,8 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton.icon(
-                        onPressed: _showYearlyRecordsDialog,
+                        onPressed:
+                            () => _showYearlyRecordsDialog(ref, widget.groupId),
                         icon: const Icon(Icons.calendar_month),
                         label: const Text('Yearly Records'),
                         style: ElevatedButton.styleFrom(
@@ -659,36 +672,35 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                             itemCount: _filteredExpenses.length,
                             itemBuilder: (context, index) {
                               final expense = _filteredExpenses[index];
-                              final createdById =
-                                  expense['createdBy'] as String?;
-                              final status = expense['status'];
-
-                              // Get user and group-related info
+                              final String? createdById = expense['createdBy'];
                               final createdByName =
                                   _userIdToName[createdById] ?? 'Loading...';
-
-                              final groupId = expense['groupId'] as String;
-
-                              final isAdminForGroup =
-                                  _groupIdToIsAdmin[groupId] ?? false;
-                              final isOwner = createdById == currentUserId;
-
-                              // Format timestamp
+                              final status = expense['status'] ?? 'Pending';
+                              final amount = expense['expenseAmount'] ?? 0.0;
                               final createdAt =
                                   (expense['createdAt'] as Timestamp?)
                                       ?.toDate();
+                              final currentUserRole =
+                                  expense['currentUserRole'] ?? 'member';
                               final timeAgo =
                                   createdAt != null
                                       ? timeago.format(createdAt)
                                       : 'Unknown';
 
-                              // Determine popup visibility
+                              final bool isAdmin =
+                                  currentUserRole == 'admin' ||
+                                  currentUserRole == 'co-admin';
+                              final bool isOwner = createdById == currentUserId;
+
                               final showPopup =
-                                  (status == 'Approved' && isAdminForGroup) ||
-                                  (status == 'Pending' &&
-                                      (isAdminForGroup || isOwner));
+                                  (status == 'Approved' && isAdmin) ||
+                                  (status == 'Pending' && (isAdmin || isOwner));
 
                               return Card(
+                                margin: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                  horizontal: 8,
+                                ),
                                 child: Stack(
                                   children: [
                                     Padding(
@@ -708,7 +720,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                                           children: [
                                             const SizedBox(height: 5),
                                             Text(
-                                              '₱${expense['expenseAmount']?.toString() ?? '0.0'}',
+                                              '₱${amount.toStringAsFixed(2)}',
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,
@@ -742,11 +754,10 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                                           ],
                                         ),
                                         trailing: Text(
-                                          expense['status'] ?? 'Pending',
+                                          status,
                                           style: TextStyle(
                                             color:
-                                                (expense['status'] ==
-                                                        'Approved')
+                                                (status == 'Approved')
                                                     ? Colors.green
                                                     : Colors.orange,
                                             fontWeight: FontWeight.bold,
@@ -765,36 +776,31 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                                         },
                                       ),
                                     ),
-                                    Positioned(
-                                      top: 0,
-                                      right: 0,
-                                      child:
-                                          showPopup
-                                              ? PopupMenuButton<String>(
-                                                icon: const Icon(
-                                                  Icons.more_vert,
+                                    if (showPopup)
+                                      Positioned(
+                                        top: 0,
+                                        right: 0,
+                                        child: PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert),
+                                          onSelected:
+                                              (choice) => _onMenuSelected(
+                                                choice,
+                                                expense,
+                                                expense['id'],
+                                              ),
+                                          itemBuilder:
+                                              (context) => const [
+                                                PopupMenuItem<String>(
+                                                  value: 'Edit Expense',
+                                                  child: Text('Edit'),
                                                 ),
-                                                onSelected:
-                                                    (choice) => _onMenuSelected(
-                                                      choice,
-                                                      expense,
-                                                      expense['id'],
-                                                    ),
-
-                                                itemBuilder:
-                                                    (context) => const [
-                                                      PopupMenuItem<String>(
-                                                        value: 'Edit Expense',
-                                                        child: Text('Edit'),
-                                                      ),
-                                                      PopupMenuItem<String>(
-                                                        value: 'Delete Expense',
-                                                        child: Text('Delete'),
-                                                      ),
-                                                    ],
-                                              )
-                                              : const SizedBox.shrink(),
-                                    ),
+                                                PopupMenuItem<String>(
+                                                  value: 'Delete Expense',
+                                                  child: Text('Delete'),
+                                                ),
+                                              ],
+                                        ),
+                                      ),
                                   ],
                                 ),
                               );
