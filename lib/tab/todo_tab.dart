@@ -1,25 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:costmate/screens/todo_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
-class TodoTab extends StatefulWidget {
-  final List<Map<String, dynamic>> todo;
-  final Future<void> Function() onRefresh;
-
-  const TodoTab({super.key, required this.todo, required this.onRefresh});
+class TodoTab extends ConsumerStatefulWidget {
+  final String groupId;
+  const TodoTab({super.key, required this.groupId});
 
   @override
-  State<TodoTab> createState() => _TodoTabState();
+  ConsumerState<TodoTab> createState() => _TodoTabState();
 }
 
-class _TodoTabState extends State<TodoTab> {
+class _TodoTabState extends ConsumerState<TodoTab> {
   final Map<String, String> _userIdToName = {};
   final Map<String, bool> _groupIdToIsAdmin = {};
-  late List<Map<String, dynamic>> _filteredTodo;
+  late List<Map<String, dynamic>> _filteredTodo = [];
   String _sortOption = 'Newest';
   String _statusFilter = 'Pending';
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
@@ -29,91 +29,16 @@ class _TodoTabState extends State<TodoTab> {
   @override
   void initState() {
     super.initState();
-    _filteredTodo = List.from(widget.todo);
-    _loadSavedFilters();
-    _loadData();
+    _loadSavedFilters(ref);
   }
 
-  Set<String> _extractGroupIds() {
-    return widget.todo.map((e) => e['groupId'] as String).toSet();
-  }
-
-  void _loadSavedFilters() async {
+  void _loadSavedFilters(WidgetRef ref) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
       _sortOption = prefs.getString('todoSortOption') ?? 'Newest';
       _statusFilter = prefs.getString('todoStatusFilter') ?? 'Pending';
     });
-    _applyFilters();
-  }
-
-  Future<void> _loadData() async {
-    setState(() {
-      isLoading = true;
-    });
-
-    await _loadUserNames();
-    await _fetchRolesForAllGroups();
-
-    setState(() {
-      isLoading = false;
-    });
-  }
-
-  Future<void> _loadUserNames() async {
-    await Future.delayed(Duration(seconds: 1));
-
-    final userIds =
-        widget.todo
-            .map((e) => e['createdBy'] as String?)
-            .whereType<String>()
-            .toSet();
-
-    final usersCollection = FirebaseFirestore.instance.collection('users');
-
-    for (final userId in userIds) {
-      final doc = await usersCollection.doc(userId).get();
-      _userIdToName[userId] = doc.data()?['name'] ?? 'Unknown';
-    }
-
-    _applyFilters();
-  }
-
-  Future<void> _fetchRolesForAllGroups() async {
-    final groupIds = _extractGroupIds();
-
-    final futures = groupIds.map((groupId) async {
-      if (!_groupIdToIsAdmin.containsKey(groupId)) {
-        // Query top-level 'groupmembers' collection for this groupId and currentUserId
-        final memberQuery =
-            await FirebaseFirestore.instance
-                .collection('groupmembers')
-                .where('groupId', isEqualTo: groupId)
-                .where('userId', isEqualTo: currentUserId)
-                .limit(1)
-                .get();
-
-        bool isAdminForGroup = false;
-
-        if (memberQuery.docs.isNotEmpty) {
-          final data = memberQuery.docs.first.data();
-          isAdminForGroup = data['role'] == 'admin';
-        }
-
-        _groupIdToIsAdmin[groupId] = isAdminForGroup;
-      }
-    });
-
-    await Future.wait(futures);
-  }
-
-  @override
-  void didUpdateWidget(covariant TodoTab oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.todo != oldWidget.todo) {
-      _filteredTodo = List.from(widget.todo);
-      _applyFilters();
-    }
+    _applyFilters(ref); // ✅ pass ref here
   }
 
   String _formatDueDate(DateTime date) {
@@ -297,7 +222,6 @@ class _TodoTabState extends State<TodoTab> {
                       dueDate: selectedDueDate, // Pass DateTime
                       description: description,
                     );
-                    await widget.onRefresh();
 
                     Navigator.pop(context);
                   },
@@ -365,20 +289,23 @@ class _TodoTabState extends State<TodoTab> {
                       .collection('TODO')
                       .doc(todoId)
                       .delete();
-                  await widget.onRefresh(); // to refresh after delete
                   Navigator.pop(context);
                 },
-                child: const Text('Delete'),
+                child: Text('Delete', style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
     );
   }
 
-  void _applyFilters() {
+  void _applyFilters(WidgetRef ref) {
+    final todoList = ref.read(
+      todoProvider as ProviderListenable,
+    ); // ⬅️ get todo list from provider
+
     setState(() {
       _filteredTodo =
-          widget.todo.where((todo) {
+          todoList.where((todo) {
             final createdAt = (todo['createdAt'] as Timestamp?)?.toDate();
             final status = todo['status'] ?? 'Pending';
             return createdAt != null && status == _statusFilter;
@@ -462,7 +389,7 @@ class _TodoTabState extends State<TodoTab> {
                 setState(() {
                   _sortOption = tempSort;
                   _statusFilter = tempApproval;
-                  _applyFilters();
+                  _applyFilters(ref);
                 });
 
                 Navigator.of(context).pop();
@@ -479,33 +406,52 @@ class _TodoTabState extends State<TodoTab> {
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 600;
 
-    return Center(
-      child: Container(
-        width: isWide ? 600 : double.infinity,
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: _showFilterDialog,
-                icon: const Icon(Icons.filter_list),
-                label: const Text('Filter'),
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(5),
+    // Listen to the todoProvider for the given groupId
+    final todoAsyncValue = ref.watch(todoProvider(widget.groupId));
+
+    // Handle loading, error, and data states
+    return todoAsyncValue.when(
+      data: (todoList) {
+        // Update loading state & filtered list
+        isLoading = false;
+        _filteredTodo = todoList;
+
+        // Optionally, update caches if needed:
+        for (var todo in todoList) {
+          final createdById = todo['createdBy'] as String?;
+          final createdByName = todo['createdByName'] as String? ?? 'Unknown';
+          if (createdById != null) {
+            _userIdToName[createdById] = createdByName;
+          }
+
+          // Cache user role to bool for example
+          final role = todo['currentUserRole'] as String? ?? 'Member';
+          _groupIdToIsAdmin[widget.groupId] =
+              (role == 'Admin' || role == 'Owner');
+        }
+
+        return Center(
+          child: Container(
+            width: isWide ? 600 : double.infinity,
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: _showFilterDialog,
+                    icon: const Icon(Icons.filter_list),
+                    label: const Text('Filter'),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const Divider(height: 10),
-            // Center the CircularProgressIndicator while it's loading
-            isLoading
-                ? Expanded(
-                  child: Center(child: const CircularProgressIndicator()),
-                )
-                : Expanded(
+                const Divider(height: 10),
+                Expanded(
                   child:
                       _filteredTodo.isEmpty
                           ? const Center(child: Text('No TODO found.'))
@@ -513,17 +459,20 @@ class _TodoTabState extends State<TodoTab> {
                             itemCount: _filteredTodo.length,
                             itemBuilder: (context, index) {
                               final todo = _filteredTodo[index];
-                              final createdById = todo['createdBy'] as String?;
+                              // final createdById = todo['createdBy'] as String?;
                               final createdByName =
-                                  _userIdToName[createdById] ?? 'Loading...';
+                                  todo['createdByName'] ?? 'Unknown';
 
                               final dueDate =
                                   (todo['dueDate'] as Timestamp?)?.toDate();
-                              final groupId = todo['groupId'] as String;
+                              // final groupId = todo['groupId'] as String;
 
-                              // Use the cached value or default false
+                              // Check if current user is admin for group
+                              final currentUserRole =
+                                  todo['currentUserRole'] ?? 'Member';
                               final isAdminForGroup =
-                                  _groupIdToIsAdmin[groupId] ?? false;
+                                  currentUserRole == 'Admin' ||
+                                  currentUserRole == 'Owner';
 
                               final showPopup =
                                   (todo['status'] == 'Pending' ||
@@ -565,7 +514,6 @@ class _TodoTabState extends State<TodoTab> {
                                                 color: Colors.black54,
                                               ),
                                             ),
-
                                             Text(
                                               'Added: ${timeago.format((todo['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now())}',
                                               style: const TextStyle(
@@ -622,9 +570,13 @@ class _TodoTabState extends State<TodoTab> {
                             },
                           ),
                 ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error: $err')),
     );
   }
 }

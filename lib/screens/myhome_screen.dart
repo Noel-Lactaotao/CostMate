@@ -255,68 +255,6 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     );
   }
 
-  void _showDeleteGroupDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Group'),
-            content: const Text(
-              'This action is irreversible. Delete this group?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _deleteGroup();
-                },
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  void _showEditGroupDialog() {
-    final TextEditingController groupNameController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Edit Group Name'),
-            content: TextField(
-              controller: groupNameController,
-              decoration: const InputDecoration(
-                labelText: 'Enter New Group Name',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final newGroupName = groupNameController.text.trim();
-                  if (newGroupName.isNotEmpty) {
-                    Navigator.pop(context); // Close the dialog
-                    await _editGroup(newGroupName); // Update group name
-                    // NO navigation here anymore
-                  }
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          ),
-    );
-  }
-
   void _leaveGroup() async {
     try {
       final groupId = _selectedGroup?['groupId'];
@@ -357,6 +295,33 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     }
   }
 
+  void _showDeleteGroupDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Group'),
+            content: const Text(
+              'This action is irreversible. Delete this group?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await _deleteGroup();
+                },
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+  }
+
   Future<void> _deleteGroup() async {
     try {
       final groupId = _selectedGroup?['groupId'];
@@ -381,6 +346,41 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Error deleting group: $e')));
     }
+  }
+
+  void _showEditGroupDialog() {
+    final TextEditingController groupNameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Edit Group Name'),
+            content: TextField(
+              controller: groupNameController,
+              decoration: const InputDecoration(
+                labelText: 'Enter New Group Name',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final newGroupName = groupNameController.text.trim();
+                  if (newGroupName.isNotEmpty) {
+                    Navigator.pop(context); // Close the dialog
+                    await _editGroup(newGroupName); // Update group name
+                    // NO navigation here anymore
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+    );
   }
 
   Future<void> _editGroup(String newName) async {

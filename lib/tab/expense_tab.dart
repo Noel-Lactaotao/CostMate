@@ -1,134 +1,58 @@
 import 'dart:core';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:costmate/screens/expense_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
-class ExpensesTab extends StatefulWidget {
-  final List<Map<String, dynamic>> expenses;
-  final Future<void> Function() onRefresh;
+class ExpensesTab extends ConsumerStatefulWidget {
+  final String groupId;
 
-  const ExpensesTab({
-    super.key,
-    required this.expenses,
-    required this.onRefresh,
-  });
+  const ExpensesTab({super.key, required this.groupId});
 
   @override
-  State<ExpensesTab> createState() => _ExpensesTabState();
+  ConsumerState<ExpensesTab> createState() => _ExpensesTabState();
 }
 
-class _ExpensesTabState extends State<ExpensesTab> {
+class _ExpensesTabState extends ConsumerState<ExpensesTab> {
   final Map<String, String> _userIdToName = {};
   final Map<String, bool> _groupIdToIsAdmin = {};
-  late List<Map<String, dynamic>> _filteredExpenses;
+  List<Map<String, dynamic>> _filteredExpenses = [];
   String _sortOption = 'Newest';
   String _timeRange = 'All';
   String _approvalFilter = 'Approved';
   final currentUserId = FirebaseAuth.instance.currentUser!.uid;
-  final user = FirebaseAuth.instance.currentUser;
   bool isLoading = true;
+  final user = FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
     super.initState();
-    _filteredExpenses = List.from(widget.expenses);
-    _loadSavedFilters();
-    _loadData();
+    _loadSavedFilters(ref);
   }
 
-  Set<String> _extractGroupIds() {
-    return widget.expenses.map((e) => e['groupId'] as String).toSet();
-  }
-
-  Future<void> _loadSavedFilters() async {
+  Future<void> _loadSavedFilters(WidgetRef ref) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    _sortOption = prefs.getString('sortOption') ?? 'Newest';
-    _timeRange = prefs.getString('timeRange') ?? 'All';
-    _approvalFilter = prefs.getString('approvalFilter') ?? 'Pending';
-  }
-
-  Future<void> _loadData() async {
     setState(() {
-      isLoading = true;
+      _sortOption = prefs.getString('sortOption') ?? 'Newest';
+      _timeRange = prefs.getString('timeRange') ?? 'All';
+      _approvalFilter = prefs.getString('approvalFilter') ?? 'Pending';
     });
-
-    await _loadUserNames();
-    await _fetchRolesForAllGroups();
-
-    setState(() {
-      isLoading = false;
-    });
+    _applyFilters(ref);
   }
 
-  Future<void> _loadUserNames() async {
-    final userIds =
-        widget.expenses
-            .map((e) => e['createdBy'] as String?)
-            .whereType<String>()
-            .toSet();
-
-    final usersCollection = FirebaseFirestore.instance.collection('users');
-
-    for (final userId in userIds) {
-      final doc = await usersCollection.doc(userId).get();
-      _userIdToName[userId] = doc.data()?['name'] ?? 'Unknown';
-    }
-  }
-
-  Future<void> _fetchRolesForAllGroups() async {
-    final groupIds = _extractGroupIds();
-
-    final futures = groupIds.map((groupId) async {
-      if (!_groupIdToIsAdmin.containsKey(groupId)) {
-        // Query top-level 'groupmembers' collection for this groupId and currentUserId
-        final memberQuery =
-            await FirebaseFirestore.instance
-                .collection('groupmembers')
-                .where('groupId', isEqualTo: groupId)
-                .where('userId', isEqualTo: currentUserId)
-                .limit(1)
-                .get();
-
-        bool isAdminForGroup = false;
-
-        if (memberQuery.docs.isNotEmpty) {
-          final data = memberQuery.docs.first.data();
-          isAdminForGroup = data['role'] == 'admin';
-        }
-
-        _groupIdToIsAdmin[groupId] = isAdminForGroup;
-      }
-    });
-
-    await Future.wait(futures);
-  }
-
-  @override
-  void didUpdateWidget(covariant ExpensesTab oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.expenses != oldWidget.expenses) {
-      _filteredExpenses = List.from(widget.expenses);
-
-      // Delay filter application slightly to ensure all async dependencies are updated
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _applyFilters();
-        }
-      });
-    }
-  }
-
-  void _applyFilters() {
+  void _applyFilters(WidgetRef ref) {
+    final expensesList = ref.read(expensesProvider as ProviderListenable);
     DateTime now = DateTime.now();
 
     setState(() {
       _filteredExpenses =
-          widget.expenses.where((expense) {
+          expensesList.where((expense) {
             final createdAt = (expense['createdAt'] as Timestamp?)?.toDate();
             final status = expense['status'] ?? 'Pending';
 
@@ -220,7 +144,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
                   _sortOption = tempSort;
                   _timeRange = tempTime;
                   _approvalFilter = tempApproval;
-                  _applyFilters();
+                  _applyFilters(ref);
                 });
 
                 Navigator.pop(context);
@@ -249,8 +173,9 @@ class _ExpensesTabState extends State<ExpensesTab> {
   }
 
   void _showYearlyRecordsDialog() {
+    final expensesList = ref.read(expensesProvider as ProviderListenable);
     final years =
-        widget.expenses
+        expensesList.expenses
             .map((e) => (e['createdAt'] as Timestamp?)?.toDate().year)
             .whereType<int>()
             .toSet()
@@ -268,7 +193,7 @@ class _ExpensesTabState extends State<ExpensesTab> {
               for (int i = 1; i <= 12; i++) _monthName(i): 0.0,
             };
 
-            for (var e in widget.expenses) {
+            for (var e in expensesList.expenses) {
               final date = (e['createdAt'] as Timestamp?)?.toDate();
               if (date != null &&
                   date.year == selectedYear &&
@@ -548,7 +473,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
                       paidByUser: selectedPaidBy,
                     );
 
-                    await widget.onRefresh();
                     Navigator.pop(context);
                   },
                   child: const Text("Save"),
@@ -582,8 +506,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
                       .collection('expenses')
                       .doc(expenseId)
                       .delete();
-
-                  await widget.onRefresh();
                   Navigator.pop(context);
                 },
                 child: Text('Delete', style: TextStyle(color: Colors.red)),
@@ -606,7 +528,6 @@ class _ExpensesTabState extends State<ExpensesTab> {
       if (kDebugMode) {
         print('Invalid amount format');
       }
-      // Optionally show error feedback to user
       return;
     }
 
@@ -640,78 +561,97 @@ class _ExpensesTabState extends State<ExpensesTab> {
     final isWide = MediaQuery.of(context).size.width > 600;
     final total = _calculateTotal();
 
-    return Center(
-      child: Container(
-        width: isWide ? 600 : double.infinity,
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _showFilterDialog,
-                    icon: const Icon(Icons.filter_list),
-                    label: const Text('Filter'),
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: _showYearlyRecordsDialog,
-                    icon: const Icon(Icons.calendar_month),
-                    label: const Text('Yearly Records'),
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 5),
-            Card(
-              color: Colors.blue.shade50,
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 20,
-                  horizontal: 16,
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Total ${_timeRange.toLowerCase()} expenses (${_approvalFilter.toLowerCase()})',
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 8),
-                    isLoading
-                        ? const Text("")
-                        : Text(
-                          '₱${total.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+    final expenseAsyncValue = ref.watch(expensesProvider(widget.groupId));
+
+    return expenseAsyncValue.when(
+      data: (expenseList) {
+        // Update loading state & filtered list
+        isLoading = false;
+        _filteredExpenses = expenseList;
+
+        // Optionally, update caches if needed:
+        for (var expense in expenseList) {
+          final createdById = expense['createdBy'] as String?;
+          final createdByName =
+              expense['createdByName'] as String? ?? 'Unknown';
+          if (createdById != null) {
+            _userIdToName[createdById] = createdByName;
+          }
+
+          // Cache user role to bool for example
+          final role = expense['currentUserRole'] as String? ?? 'Member';
+          _groupIdToIsAdmin[widget.groupId] =
+              (role == 'Admin' || role == 'Owner');
+        }
+
+        return Center(
+          child: Container(
+            width: isWide ? 600 : double.infinity,
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _showFilterDialog,
+                        icon: const Icon(Icons.filter_list),
+                        label: const Text('Filter'),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
                           ),
                         ),
-                  ],
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: _showYearlyRecordsDialog,
+                        icon: const Icon(Icons.calendar_month),
+                        label: const Text('Yearly Records'),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-            const Divider(height: 20),
-            isLoading
-                ? Expanded(
-                  child: Center(child: const CircularProgressIndicator()),
-                )
-                : Expanded(
+                const SizedBox(height: 5),
+                Card(
+                  color: Colors.blue.shade50,
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 20,
+                      horizontal: 16,
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Total ${_timeRange.toLowerCase()} expenses (${_approvalFilter.toLowerCase()})',
+                          style: const TextStyle(fontSize: 18),
+                        ),
+                        const SizedBox(height: 8),
+                        isLoading
+                            ? const Text("")
+                            : Text(
+                              '₱${total.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 20),
+                Expanded(
                   child:
                       _filteredExpenses.isEmpty
                           ? const Center(child: Text('No expenses found.'))
@@ -861,9 +801,13 @@ class _ExpensesTabState extends State<ExpensesTab> {
                             },
                           ),
                 ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error: $err')),
     );
   }
 }

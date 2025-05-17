@@ -1,3 +1,4 @@
+import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/screens/main_screen.dart';
 import 'package:costmate/tab/expense_tab.dart';
 import 'package:costmate/tab/member_tab.dart';
@@ -9,8 +10,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class GroupScreen extends StatefulWidget {
+class GroupScreen extends ConsumerStatefulWidget {
   final Function(AppBar) onUpdateAppBar;
   final String? groupId;
   final String? groupName;
@@ -25,10 +27,10 @@ class GroupScreen extends StatefulWidget {
   });
 
   @override
-  State<GroupScreen> createState() => _GroupScreenState();
+  ConsumerState<GroupScreen> createState() => _GroupScreenState();
 }
 
-class _GroupScreenState extends State<GroupScreen> {
+class _GroupScreenState extends ConsumerState<GroupScreen> {
   int _selectedIndex = 0;
   late String groupId = widget.groupId!;
   late String groupName = widget.groupName!;
@@ -48,10 +50,13 @@ class _GroupScreenState extends State<GroupScreen> {
   List<Map<String, dynamic>> todoList = [];
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
   final user = FirebaseAuth.instance.currentUser;
+  Map<String, dynamic>? _selectedGroup;
 
   @override
   void initState() {
     super.initState();
+
+    groupId = widget.groupId!;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onUpdateAppBar(
@@ -63,10 +68,7 @@ class _GroupScreenState extends State<GroupScreen> {
           backgroundColor: Colors.green,
           centerTitle: true,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _refreshData,
-            ),
+            IconButton(icon: const Icon(Icons.notifications), onPressed: null),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (choice) => _onMenuSelected(choice, groupId),
@@ -116,13 +118,6 @@ class _GroupScreenState extends State<GroupScreen> {
         ),
       );
     });
-
-    if (widget.groupId != null) {
-      groupId = widget.groupId!;
-      _fetchExpenses();
-      _fetchTODOs();
-      _fetchMembers();
-    }
   }
 
   @override
@@ -160,16 +155,6 @@ class _GroupScreenState extends State<GroupScreen> {
         _showDeleteGroupDialog();
         break;
     }
-  }
-
-  Future<void> _refreshData() async {
-    await Future.wait([_fetchExpenses(), _fetchTODOs(), _fetchMembers()]);
-
-    if (kDebugMode) {
-      print('Data refreshed');
-    }
-
-    setState(() {}); // To trigger rebuild if needed
   }
 
   Future<void> _showAddExpense(String groupId) async {
@@ -452,7 +437,7 @@ class _GroupScreenState extends State<GroupScreen> {
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  _leaveGroup(); // Your method to handle leaving
+                  _leaveGroup();
                 },
                 child: const Text('Leave'),
               ),
@@ -461,62 +446,106 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
+  void _leaveGroup() async {
+    try {
+      final groupId = _selectedGroup?['groupId'];
+      if (groupId == null) return;
+
+      final groupMembersRef = FirebaseFirestore.instance
+          .collection('groupmembers')
+          .where('groupId', isEqualTo: groupId)
+          .where('userId', isEqualTo: currentUserId);
+
+      final snapshot = await groupMembersRef.get();
+
+      if (snapshot.docs.isNotEmpty) {
+        for (var doc in snapshot.docs) {
+          await doc.reference.delete();
+        }
+
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final _ = ref.refresh(userInfoProvider);
+          final _ = ref.refresh(userGroupsProvider);
+        }
+
+        if (!context.mounted) return;
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('You left the group.')));
+
+        // Navigate to MainScreen after leaving
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are not a member of this group.')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error leaving group: $e')));
+    }
+  }
+
   void _showDeleteGroupDialog() {
     showDialog(
       context: context,
       builder:
-          (dialogContext) => AlertDialog(
+          (context) => AlertDialog(
             title: const Text('Delete Group'),
             content: const Text(
               'This action is irreversible. Delete this group?',
             ),
             actions: [
               TextButton(
-                onPressed:
-                    () =>
-                        Navigator.of(dialogContext, rootNavigator: true).pop(),
+                onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: () async {
-                  Navigator.of(
-                    dialogContext,
-                    rootNavigator: true,
-                  ).pop(); // Close the dialog
-
-                  final groupId = widget.groupId;
-                  if (groupId == null) return;
-
-                  try {
-                    await ValidationService().deleteGroupWithSubcollections(
-                      groupId,
-                    );
-
-                    // Wait a tick before navigating to ensure context is valid
-                    Future.microtask(() {
-                      if (mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (context) => const MainScreen(),
-                          ),
-                          (route) => false,
-                        );
-                      }
-                    });
-                  } catch (e) {
-                    if (!mounted) return;
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error deleting group: $e')),
-                    );
-                  }
+                  Navigator.pop(context);
+                  await _deleteGroup();
                 },
                 child: const Text('Delete'),
               ),
             ],
           ),
     );
+  }
+
+  Future<void> _deleteGroup() async {
+    try {
+      final groupId = _selectedGroup?['groupId'];
+      if (groupId == null) return;
+
+      await ValidationService().deleteGroupWithSubcollections(groupId);
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final _ = ref.refresh(userInfoProvider);
+        final _ = ref.refresh(userGroupsProvider);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Group deleted successfully.')),
+      );
+
+      // Navigate to MainScreen after deleting
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error deleting group: $e')));
+    }
   }
 
   void _showEditGroupDialog() {
@@ -542,11 +571,9 @@ class _GroupScreenState extends State<GroupScreen> {
                 onPressed: () async {
                   final newGroupName = groupNameController.text.trim();
                   if (newGroupName.isNotEmpty) {
-                    Navigator.pop(context); // Close the dialog first
-                    await _editGroup(newGroupName); // Await properly here
-                    if (mounted) {
-                      setState(() {}); // Refresh the screen
-                    }
+                    Navigator.pop(context); // Close the dialog
+                    await _editGroup(newGroupName); // Update group name
+                    // NO navigation here anymore
                   }
                 },
                 child: const Text('Save'),
@@ -556,120 +583,21 @@ class _GroupScreenState extends State<GroupScreen> {
     );
   }
 
-  void _showViewGroupCodeDialog() async {
-    final groupId = widget.groupId;
-    if (groupId == null) return;
-
-    try {
-      final groupDoc =
-          await FirebaseFirestore.instance
-              .collection('groups')
-              .doc(groupId)
-              .get();
-
-      if (groupDoc.exists) {
-        final groupCode = groupDoc.data()?['groupCode'] ?? 'Unavailable';
-
-        showDialog(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                title: const Text('Group Code'),
-                content: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Code: $groupCode',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: groupCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Group code copied to clipboard'),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
-        );
-      } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Group not found.')));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error fetching group code: $e')));
-    }
-  }
-
-  void _leaveGroup() async {
-    try {
-      final groupId = widget.groupId;
-      if (groupId == null) return;
-
-      final groupMembersRef = FirebaseFirestore.instance
-          .collection('groupmembers')
-          .where('groupId', isEqualTo: groupId)
-          .where('userId', isEqualTo: currentUserId);
-
-      final snapshot = await groupMembersRef.get();
-
-      if (snapshot.docs.isNotEmpty) {
-        for (var doc in snapshot.docs) {
-          await doc.reference.delete();
-        }
-
-        if (!context.mounted) return;
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('You left the group.')));
-
-        // ✅ Navigate to MainScreen after successful removal
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-          (route) => false,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are not a member of this group.')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error leaving group: $e')));
-    }
-  }
-
   Future<void> _editGroup(String newName) async {
     try {
+      final groupId = _selectedGroup?['groupId'];
+      if (groupId == null) return;
+
       final groupRef = FirebaseFirestore.instance
           .collection('groups')
           .doc(groupId);
       await groupRef.update({'groupName': newName});
 
-      if (!mounted) return;
-
-      setState(() {
-        groupName = newName; // Update local state
-      });
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final _ = ref.refresh(userInfoProvider);
+        final _ = ref.refresh(userGroupsProvider);
+      }
 
       // Rebuild the updated AppBar title
       widget.onUpdateAppBar(
@@ -743,82 +671,64 @@ class _GroupScreenState extends State<GroupScreen> {
     }
   }
 
-  // Fetch the expenses from Firestore
-  Future<void> _fetchExpenses() async {
+  void _showViewGroupCodeDialog() async {
     final groupId = widget.groupId;
-
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('expenses')
-            .where('groupId', isEqualTo: groupId)
-            .get();
-
-    setState(() {
-      expensesList =
-          snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id; // Attach Firestore document ID
-            return data;
-          }).toList();
-    });
-  }
-
-  Future<void> _fetchTODOs() async {
-    final groupId = widget.groupId;
-    final snapshot =
-        await FirebaseFirestore.instance
-            .collection('TODO')
-            .where('groupId', isEqualTo: groupId)
-            .get();
-
-    setState(() {
-      todoList =
-          snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id; // Attach Firestore document ID
-            return data;
-          }).toList();
-    });
-  }
-
-  Future<void> _fetchMembers() async {
-    final groupId = widget.groupId;
+    if (groupId == null) return;
 
     try {
-      // Query top-level 'groupmembers' collection where groupId == current groupId
-      final groupMembersSnapshot =
+      final groupDoc =
           await FirebaseFirestore.instance
-              .collection('groupmembers')
-              .where('groupId', isEqualTo: groupId)
+              .collection('groups')
+              .doc(groupId)
               .get();
 
-      final List<Map<String, dynamic>> fetchedMembers = [];
+      if (groupDoc.exists) {
+        final groupCode = groupDoc.data()?['groupCode'] ?? 'Unavailable';
 
-      for (var doc in groupMembersSnapshot.docs) {
-        final userId = doc['userId'] as String;
-        final role = doc['role'] as String?;
-
-        final userDoc =
-            await FirebaseFirestore.instance
-                .collection('users')
-                .doc(userId)
-                .get();
-
-        if (userDoc.exists) {
-          final userData = userDoc.data()!;
-          userData['uid'] = userId;
-          userData['role'] = role;
-          fetchedMembers.add(userData);
-        }
+        showDialog(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Group Code'),
+                content: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Code: $groupCode',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: groupCode));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Group code copied to clipboard'),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+        );
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Group not found.')));
       }
-
-      setState(() {
-        membersList = fetchedMembers;
-      });
     } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching members: $e');
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error fetching group code: $e')));
     }
   }
 
@@ -858,11 +768,12 @@ class _GroupScreenState extends State<GroupScreen> {
           const SnackBar(content: Text("Expense Added Successfully")),
         );
 
-        // Optionally clear fields here or after dialog is closed
+        // Clear input fields after success
         expenseTitleController.clear();
         expenseDescriptionController.clear();
         expenseAmountController.clear();
-        _fetchExpenses();
+
+        // No need to call _fetchExpenses(); Riverpod stream will auto-update
       } else {
         ScaffoldMessenger.of(
           context,
@@ -881,7 +792,7 @@ class _GroupScreenState extends State<GroupScreen> {
   Future<void> addTODOList({
     required String title,
     required String description,
-    required DateTime? dueDate, // <-- Now DateTime?
+    required DateTime? dueDate,
   }) async {
     final groupId = this.groupId;
     final createdBy = user?.uid;
@@ -897,7 +808,7 @@ class _GroupScreenState extends State<GroupScreen> {
       final todoId = await ValidationService().addTODOList(
         title: title,
         groupId: groupId,
-        dueDate: dueDate, // pass as DateTime?
+        dueDate: dueDate,
         description: description,
         createdBy: createdBy,
       );
@@ -906,7 +817,6 @@ class _GroupScreenState extends State<GroupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("TODO Added Successfully")),
         );
-        _fetchTODOs(); // Refresh the list
       } else {
         ScaffoldMessenger.of(
           context,
@@ -934,13 +844,13 @@ class _GroupScreenState extends State<GroupScreen> {
 
     switch (_selectedIndex) {
       case 0:
-        body = ExpensesTab(expenses: expensesList, onRefresh: _fetchExpenses);
+        body = ExpensesTab(groupId: groupId);
         break;
       case 1:
-        body = TodoTab(todo: todoList, onRefresh: _fetchTODOs);
+        body = TodoTab(groupId: groupId);
         break;
       case 2:
-        body = MemberTab(members: membersList); // ✅ pass members here
+        body = MemberTab(groupId: groupId); // ✅ pass members here
         break;
       default:
         body = Center(child: Text('Invalid Tab'));
