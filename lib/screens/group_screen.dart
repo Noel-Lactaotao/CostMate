@@ -17,6 +17,7 @@ class GroupScreen extends ConsumerStatefulWidget {
   final String? groupId;
   final String? groupName;
   final bool? isAdmin;
+  final String? role;
 
   const GroupScreen({
     super.key,
@@ -24,6 +25,7 @@ class GroupScreen extends ConsumerStatefulWidget {
     this.groupId,
     this.groupName,
     this.isAdmin,
+    this.role,
   });
 
   @override
@@ -34,6 +36,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   int _selectedIndex = 0;
   late String groupId = widget.groupId!;
   late String groupName = widget.groupName!;
+  late String role = widget.role!.toLowerCase();
   late bool isAdmin = widget.isAdmin!;
   final expenseTitleController = TextEditingController();
   final expenseDescriptionController = TextEditingController();
@@ -57,6 +60,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     super.initState();
 
     groupId = widget.groupId!;
+    late String role = widget.role!.toLowerCase();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onUpdateAppBar(
@@ -72,47 +76,47 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (choice) => _onMenuSelected(choice, groupId),
-              itemBuilder:
-                  (context) => [
+              itemBuilder: (context) {
+                return [
+                  const PopupMenuItem(
+                    value: 'Add Expense',
+                    child: Text('Add Expense'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'Add TODO',
+                    child: Text('Add TODO'),
+                  ),
+                  if (role != 'admin')
                     const PopupMenuItem(
-                      value: 'Add Expense',
-                      child: Text('Add Expense'),
+                      value: 'Leave Group',
+                      child: Text('Leave Group'),
+                    ),
+                  if (role == 'admin')
+                    const PopupMenuItem(
+                      value: 'Edit Group',
+                      child: Text('Edit Group'),
+                    ),
+                  if (role == 'admin')
+                    const PopupMenuItem(
+                      value: 'Delete Group',
+                      child: Text('Delete Group'),
+                    ),
+                  if (role == 'admin' || role == 'co-admin') ...[
+                    const PopupMenuItem(
+                      value: 'View Group Code',
+                      child: Text('View Group Code'),
                     ),
                     const PopupMenuItem(
-                      value: 'Add TODO',
-                      child: Text('Add TODO'),
+                      value: 'Invite Member',
+                      child: Text('Invite Member'),
                     ),
-                    if (!isAdmin)
-                      const PopupMenuItem(
-                        value: 'Leave Group',
-                        child: Text('Leave Group'),
-                      ),
-                    if (isAdmin)
-                      const PopupMenuItem(
-                        value: 'Edit Group',
-                        child: Text('Edit Group'),
-                      ),
-                    if (isAdmin)
-                      const PopupMenuItem(
-                        value: 'Delete Group',
-                        child: Text('Delete Group'),
-                      ),
-                    if (isAdmin)
-                      const PopupMenuItem(
-                        value: 'View Group Code',
-                        child: Text('View Group Code'),
-                      ),
-                    if (isAdmin)
-                      const PopupMenuItem(
-                        value: 'Invite Member',
-                        child: Text('Invite Member'),
-                      ),
-                    if (isAdmin)
-                      const PopupMenuItem(
-                        value: 'Group Log',
-                        child: Text('Group Log'),
-                      ),
+                    const PopupMenuItem(
+                      value: 'Group Log',
+                      child: Text('Group Log'),
+                    ),
                   ],
+                ];
+              },
             ),
           ],
         ),
@@ -623,36 +627,35 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                       value: 'Add TODO',
                       child: Text('Add TODO'),
                     ),
-                    if (!isAdmin)
+                    if (role != 'admin')
                       const PopupMenuItem(
                         value: 'Leave Group',
                         child: Text('Leave Group'),
                       ),
-                    if (isAdmin)
+                    if (role == 'admin')
                       const PopupMenuItem(
                         value: 'Edit Group',
                         child: Text('Edit Group'),
                       ),
-                    if (isAdmin)
+                    if (role == 'admin')
                       const PopupMenuItem(
                         value: 'Delete Group',
                         child: Text('Delete Group'),
                       ),
-                    if (isAdmin)
+                    if (role == 'admin' || role == 'co-admin') ...[
                       const PopupMenuItem(
                         value: 'View Group Code',
                         child: Text('View Group Code'),
                       ),
-                    if (isAdmin)
                       const PopupMenuItem(
                         value: 'Invite Member',
                         child: Text('Invite Member'),
                       ),
-                    if (isAdmin)
                       const PopupMenuItem(
                         value: 'Group Log',
                         child: Text('Group Log'),
                       ),
+                    ],
                   ],
             ),
           ],

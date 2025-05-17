@@ -409,6 +409,19 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     }
   }
 
+  String formatRole(String role) {
+    switch (role.toLowerCase()) {
+      case 'admin':
+        return 'Admin';
+      case 'co-admin':
+        return 'Co-Admin';
+      case 'member':
+        return 'Member';
+      default:
+        return role[0].toUpperCase() + role.substring(1).toLowerCase();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final groupsAsync = ref.watch(userGroupsProvider);
@@ -428,14 +441,17 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                 runSpacing: 12,
                 children:
                     groups.map((group) {
+                      final String role = (group['role'] as String).toLowerCase();
                       return GestureDetector(
                         onTap: () {
                           widget.onGroupTap({
                             'groupId': group['groupId'],
                             'groupName': group['groupName'],
                             'isAdmin': group['isAdmin'],
+                            'role': group['role'], // added role here
                           });
                         },
+
                         child: Stack(
                           children: [
                             Container(
@@ -469,7 +485,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    "Role: ${group['role']}",
+                                    "Role: ${formatRole(group['role'])}",
                                     style: const TextStyle(color: Colors.grey),
                                   ),
                                   Text(
@@ -488,12 +504,12 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                                         _onGroupMenuSelected(choice, group),
                                 itemBuilder: (BuildContext context) {
                                   return <PopupMenuEntry<String>>[
-                                    if (!group['isAdmin'])
+                                    if (role != 'admin')
                                       const PopupMenuItem<String>(
                                         value: 'Leave Group',
                                         child: Text('Leave Group'),
                                       ),
-                                    if (group['isAdmin']) ...[
+                                    if (role == 'admin') ...[
                                       const PopupMenuItem<String>(
                                         value: 'Edit Group',
                                         child: Text('Edit Group'),
@@ -502,9 +518,20 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                                         value: 'Delete Group',
                                         child: Text('Delete Group'),
                                       ),
+                                    ],
+                                    if (role == 'admin' ||
+                                        role == 'co-admin') ...[
                                       const PopupMenuItem<String>(
                                         value: 'View Group Code',
                                         child: Text('View Group Code'),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'Invite Member',
+                                        child: Text('Invite Member'),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'Group Log',
+                                        child: Text('Group Log'),
                                       ),
                                     ],
                                   ];
