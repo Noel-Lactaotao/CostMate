@@ -672,6 +672,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                             itemCount: _filteredExpenses.length,
                             itemBuilder: (context, index) {
                               final expense = _filteredExpenses[index];
+                              final expenseId = expense['expenseId'] ?? '';
                               final String? createdById = expense['createdBy'];
                               final createdByName =
                                   _userIdToName[createdById] ?? 'Loading...';
@@ -769,7 +770,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                                             MaterialPageRoute(
                                               builder:
                                                   (_) => ExpenseScreen(
-                                                    expense: expense,
+                                                    expenseId: expenseId,
                                                   ),
                                             ),
                                           );

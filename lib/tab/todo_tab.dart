@@ -467,6 +467,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                             itemCount: _filteredTodo.length,
                             itemBuilder: (context, index) {
                               final todo = _filteredTodo[index];
+                              final todoId = todo['todoId'] ?? '';
                               final String? createdById = todo['createdBy'];
                               final createdByName =
                                   _userIdToName[createdById] ?? 'Loading...';
@@ -541,7 +542,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                                             MaterialPageRoute(
                                               builder:
                                                   (context) =>
-                                                      TodoScreen(todo: todo),
+                                                      TodoScreen(todoId: todoId),
                                             ),
                                           );
                                         },

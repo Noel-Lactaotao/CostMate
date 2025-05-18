@@ -209,3 +209,56 @@ final membersProvider =
         );
       });
     });
+
+final singleExpenseProvider =
+    StreamProvider.family<Map<String, dynamic>?, String>((ref, expenseId) {
+      final firestore = FirebaseFirestore.instance;
+
+      return firestore
+          .collection('expenses')
+          .doc(expenseId)
+          .snapshots()
+          .asyncMap((doc) async {
+            final data = doc.data();
+            if (data == null) return null;
+
+            final userDoc =
+                await firestore
+                    .collection('users')
+                    .doc(data['createdBy'])
+                    .get();
+            final userData = userDoc.data();
+
+            return {
+              ...data,
+              'id': doc.id,
+              'createdByName': userData?['name'] ?? 'Unknown',
+              'createdByEmail': userData?['email'] ?? 'Unknown',
+            };
+          });
+    });
+
+final singleTodoProvider =
+    StreamProvider.family<Map<String, dynamic>?, String>((ref, todoId) {
+  final firestore = FirebaseFirestore.instance;
+
+  return firestore
+      .collection('TODO')
+      .doc(todoId)
+      .snapshots()
+      .asyncMap((doc) async {
+    final data = doc.data();
+    if (data == null) return null;
+
+    final userDoc =
+        await firestore.collection('users').doc(data['createdBy']).get();
+    final userData = userDoc.data();
+
+    return {
+      ...data,
+      'id': doc.id,
+      'createdByName': userData?['name'] ?? 'Unknown',
+      'createdByEmail': userData?['email'] ?? 'Unknown',
+    };
+  });
+});

@@ -1,25 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
-class ExpenseScreen extends StatefulWidget {
-  final Map<String, dynamic> expense;
+class ExpenseScreen extends ConsumerStatefulWidget {
+  final String expenseId;
 
-  const ExpenseScreen({Key? key, required this.expense}) : super(key: key);
+  const ExpenseScreen({super.key, required this.expenseId});
 
   @override
-  State<ExpenseScreen> createState() => _ExpenseScreenState();
+  ConsumerState<ExpenseScreen> createState() => _ExpenseScreenState();
 }
 
-class _ExpenseScreenState extends State<ExpenseScreen> {
-  late Map<String, dynamic> expense;
+class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
+  final user = FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
     super.initState();
-    expense = widget.expense;
   }
 
   Future<String> getUserEmail(String uid) async {
@@ -74,27 +76,33 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           .collection('expenses')
           .doc(expenseId)
           .update({'status': 'Approved'});
-      setState(() {
-        expense['status'] = 'Approved';
-      });
     } catch (e) {
       debugPrint('Error approving expense: $e');
     }
   }
 
   void _onMenuSelected(
-    BuildContext context,
     String choice,
     Map<String, dynamic> expenseData,
     String expenseId,
   ) {
     switch (choice) {
       case 'Edit Expense':
-        _showEditExpenseDialog();
+        _showEditExpenseDialog(
+          expenseId: expenseId,
+          groupId: expenseData['groupId'],
+          currentTitle: expenseData['expenseTitle'] ?? '',
+          currentAmount: expenseData['expenseAmount']?.toString() ?? '0.0',
+          currentDescription: expenseData['expenseDescription'] ?? '',
+          currentPaidBy: expenseData['paidBy'],
+        );
         break;
 
       case 'Delete Expense':
-        _showDeleteExpenseDialog();
+        _showDeleteExpenseDialog(
+          expenseId: expenseId,
+          title: expenseData['expenseTitle'] ?? 'Untitled',
+        );
         break;
     }
   }
@@ -127,14 +135,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Update local state after editing
-      setState(() {
-        expense['expenseTitle'] = title;
-        expense['expenseAmount'] = amount;
-        expense['expenseDescription'] = description;
-        expense['expensePaidBy'] = paidByUser;
-      });
-
       if (kDebugMode) {
         print('Expense updated successfully');
       }
@@ -145,26 +145,32 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  void _showEditExpenseDialog() async {
+  void _showEditExpenseDialog({
+    required String expenseId,
+    required String groupId,
+    required String currentTitle,
+    required String currentAmount,
+    required String currentDescription,
+    required String? currentPaidBy,
+  }) async {
     List<String> memberList = [];
-    final currentUser = FirebaseAuth.instance.currentUser;
-    String? currentUserEmail = currentUser?.email;
+    String? currentUserEmail = user?.email;
 
     // Initialize controllers with current expense values
     final TextEditingController expenseTitleController = TextEditingController(
-      text: expense['expenseTitle'] ?? '',
+      text: currentTitle,
     );
     final TextEditingController expenseAmountController = TextEditingController(
-      text: (expense['expenseAmount'] ?? '').toString(),
+      text: currentAmount,
     );
     final TextEditingController expenseDescriptionController =
-        TextEditingController(text: expense['expenseDescription'] ?? '');
+        TextEditingController(text: currentDescription);
 
     try {
       final groupMembersSnapshot =
           await FirebaseFirestore.instance
               .collection('groupmembers')
-              .where('groupId', isEqualTo: expense['groupId'])
+              .where('groupId', isEqualTo: groupId)
               .get();
 
       for (var doc in groupMembersSnapshot.docs) {
@@ -193,7 +199,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       memberList.insert(0, currentUserEmail);
     }
 
-    String? selectedPaidBy = expense['expensePaidBy'] ?? currentUserEmail;
+    String? selectedPaidBy = currentPaidBy ?? currentUserEmail;
 
     await showDialog(
       context: context,
@@ -221,10 +227,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         const SizedBox(height: 10),
                         TextFormField(
                           controller: expenseAmountController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
                             labelText: 'Amount',
                             border: OutlineInputBorder(),
                           ),
@@ -289,7 +293,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         expenseDescriptionController.text.trim();
 
                     await updateExpense(
-                      expenseId: expense['id'],
+                      expenseId: expenseId,
                       title: title,
                       amountText: amountText,
                       description: description,
@@ -308,15 +312,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  void _showDeleteExpenseDialog() {
+  void _showDeleteExpenseDialog({
+    required String expenseId,
+    required String title,
+  }) {
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
             title: const Text('Delete Expense'),
-            content: Text(
-              'Are you sure you want to delete "${expense['expenseTitle'] ?? 'Untitled'}"?',
-            ),
+            content: Text('Are you sure you want to delete "$title"?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -326,12 +331,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 onPressed: () async {
                   await FirebaseFirestore.instance
                       .collection('expenses')
-                      .doc(expense['id'])
+                      .doc(expenseId)
                       .delete();
 
                   Navigator.pop(context);
-                  // You might want to pop this screen or refresh the list after deletion
-                  if (mounted) Navigator.pop(context);
                 },
                 child: const Text(
                   'Delete',
@@ -343,194 +346,204 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Future<String> getCurrentUserId() async {
-    final user = FirebaseAuth.instance.currentUser;
-    return user?.uid ?? '';
-  }
-
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 600;
 
-    final date = (expense['createdAt'] as Timestamp?)?.toDate();
-    final relativeTime = date != null ? timeago.format(date) : 'Unknown time';
+    final expenseAsync = ref.watch(singleExpenseProvider(widget.expenseId));
 
-    final String title = expense['expenseTitle'] ?? 'Untitled';
-    final String groupId = expense['groupId'] ?? '';
-    final String paidBy = expense['expensePaidBy'] ?? 'Unknown';
-    final String description =
-        expense['expenseDescription'] ?? 'No description';
-    final String createdByUid = expense['createdBy'] ?? '';
-    final String status = expense['status'] ?? 'Not specified';
-    final double amount = (expense['expenseAmount'] ?? 0.0) * 1.0;
+    return expenseAsync.when(
+      data: (expense) {
+        if (expense == null)
+          return const Center(child: Text('Expense not found'));
 
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final String userId = currentUser?.uid ?? '';
+        final date = (expense['createdAt'] as Timestamp?)?.toDate();
+        final relativeTime =
+            date != null ? timeago.format(date) : 'Unknown time';
+        final formattedDate =
+            date != null
+                ? DateFormat('MMMM d, y').format(date)
+                : 'Unknown date';
 
-    return FutureBuilder<String>(
-      future: getUserRole(groupId, userId),
-      builder: (context, roleSnapshot) {
-        final isAdminOrCoAdmin =
-            (roleSnapshot.data == 'admin' || roleSnapshot.data == 'co-admin');
+        final expenseId = expense['expenseId'];
+        final String title = expense['expenseTitle'] ?? 'Untitled';
+        final String groupId = expense['groupId'] ?? '';
+        final String paidBy = expense['expensePaidBy'] ?? 'Unknown';
+        final String description =
+            expense['expenseDescription'] ?? 'No description';
+        final String createdByUid = expense['createdBy'] ?? '';
+        final String status = expense['status'] ?? 'Not specified';
+        final double amount = (expense['expenseAmount'] ?? 0.0) * 1.0;
+
+        final currentUser = FirebaseAuth.instance.currentUser;
+        final String userId = currentUser?.uid ?? '';
 
         return FutureBuilder<String>(
-          future: getGroupName(groupId),
-          builder: (context, groupSnapshot) {
-            final String groupName =
-                groupSnapshot.connectionState == ConnectionState.waiting
-                    ? 'Loading...'
-                    : (groupSnapshot.data ?? 'Unknown group');
+          future: getUserRole(groupId, userId),
+          builder: (context, roleSnapshot) {
+            final isAdminOrCoAdmin =
+                (roleSnapshot.data == 'admin' ||
+                    roleSnapshot.data == 'co-admin');
 
-            return Scaffold(
-              appBar: AppBar(
-                title: Text(
-                  groupName,
-                  style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
-                ),
-                backgroundColor: Colors.green,
-                centerTitle: true,
-                actions: [
-                  // Keep the same popup menu
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert),
-                    onSelected:
-                        (choice) => _onMenuSelected(
-                          context,
-                          choice,
-                          expense,
-                          expense['id'],
-                        ),
-                    itemBuilder:
-                        (context) => const [
-                          PopupMenuItem<String>(
-                            value: 'Edit Expense',
-                            child: Text('Edit'),
-                          ),
-                          PopupMenuItem<String>(
-                            value: 'Delete Expense',
-                            child: Text('Delete'),
-                          ),
-                        ],
+            return FutureBuilder<String>(
+              future: getGroupName(groupId),
+              builder: (context, groupSnapshot) {
+                final String groupName =
+                    groupSnapshot.connectionState == ConnectionState.waiting
+                        ? 'Loading...'
+                        : (groupSnapshot.data ?? 'Unknown group');
+
+                return Scaffold(
+                  appBar: AppBar(
+                    title: Text(
+                      groupName,
+                      style: const TextStyle(
+                        fontSize: 27,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    backgroundColor: Colors.green,
+                    centerTitle: true,
+                    actions: [
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert),
+                        onSelected:
+                            (choice) =>
+                                _onMenuSelected(choice, expense, expense['id']),
+                        itemBuilder:
+                            (context) => const [
+                              PopupMenuItem<String>(
+                                value: 'Edit Expense',
+                                child: Text('Edit'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'Delete Expense',
+                                child: Text('Delete'),
+                              ),
+                            ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              body: SingleChildScrollView(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    width: isWide ? 600 : double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width:
-                              double
-                                  .infinity, // makes the card fill max width inside the Column
-                          child: Card(
-                            color: Colors.blue.shade50,
-                            elevation: 2,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 20,
-                                horizontal: 35,
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    title,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                  body: SingleChildScrollView(
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: isWide ? 600 : double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: Card(
+                                color: Colors.blue.shade50,
+                                elevation: 2,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 20,
+                                    horizontal: 35,
                                   ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    '₱${amount.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green[700],
-                                    ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        title,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        '₱${amount.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green[700],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                    
-                        const SizedBox(height: 24),
-                    
-                        buildDetailItem(
-                          const Icon(Icons.person),
-                          'Paid by',
-                          paidBy,
-                        ),
-                        buildDetailItem(
-                          const Icon(Icons.description),
-                          'Description',
-                          description,
-                        ),
-                    
-                        FutureBuilder<String>(
-                          future: getUserEmail(createdByUid),
-                          builder: (context, snapshot) {
-                            final String createdByEmail =
-                                snapshot.connectionState ==
-                                        ConnectionState.waiting
-                                    ? 'Loading...'
-                                    : (snapshot.data ?? 'Unknown user');
-                            return buildDetailItem(
-                              const Icon(Icons.account_circle),
-                              'Created by',
-                              createdByEmail,
-                            );
-                          },
-                        ),
-                    
-                        buildDetailItem(
-                          const Icon(Icons.verified),
-                          'Status',
-                          status,
-                        ),
-                        buildDetailItem(
-                          const Icon(Icons.access_time),
-                          'Created at',
-                          relativeTime,
-                        ),
-                    
-                        const SizedBox(height: 20),
-                    
-                        if (status.toLowerCase() == 'pending' &&
-                            isAdminOrCoAdmin)
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                await approveExpense(expense['id']);
-                                Navigator.pop(context);
-                              },
-                              icon: const Icon(Icons.check),
-                              label: const Text('Approve'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
                                 ),
-                                textStyle: const TextStyle(fontSize: 16),
                               ),
                             ),
-                          ),
-                      ],
+                            const SizedBox(height: 24),
+
+                            buildDetailItem(
+                              const Icon(Icons.person),
+                              'Paid by',
+                              paidBy,
+                            ),
+                            buildDetailItem(
+                              const Icon(Icons.description),
+                              'Description',
+                              description,
+                            ),
+                            FutureBuilder<String>(
+                              future: getUserEmail(createdByUid),
+                              builder: (context, snapshot) {
+                                final String createdByEmail =
+                                    snapshot.connectionState ==
+                                            ConnectionState.waiting
+                                        ? 'Loading...'
+                                        : (snapshot.data ?? 'Unknown user');
+                                return buildDetailItem(
+                                  const Icon(Icons.account_circle),
+                                  'Created by',
+                                  createdByEmail,
+                                );
+                              },
+                            ),
+                            buildDetailItem(
+                              const Icon(Icons.verified),
+                              'Status',
+                              status,
+                            ),
+                            buildDetailItem(
+                              const Icon(Icons.calendar_today),
+                              'Created on',
+                              formattedDate,
+                            ),
+                            buildDetailItem(
+                              const Icon(Icons.access_time),
+                              'Created',
+                              relativeTime,
+                            ),
+                            const SizedBox(height: 20),
+
+                            if (status.toLowerCase() == 'pending' &&
+                                isAdminOrCoAdmin)
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    await approveExpense(expenseId);
+                                    Navigator.pop(context);
+                                  },
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Approve'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    textStyle: const TextStyle(fontSize: 16),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         );
       },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Error: $err')),
     );
   }
 
