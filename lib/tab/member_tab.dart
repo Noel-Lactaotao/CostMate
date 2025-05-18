@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -15,14 +16,57 @@ class MemberTab extends ConsumerStatefulWidget {
 class _MemberTabState extends ConsumerState<MemberTab> {
   final currentUserId = FirebaseAuth.instance.currentUser!.uid;
 
-  void _onMemberMenuSelected(String choice) {
-    switch (choice) {
-      case 'Promote':
-        break;
-      case 'Demote':
-        break;
-      case 'Remove':
-        break;
+  void _onMemberMenuSelected(
+    String choice,
+    String selectedUserId,
+    String groupId,
+  ) async {
+    final memberRef = FirebaseFirestore.instance
+        .collection('groupmembers')
+        .where('userId', isEqualTo: selectedUserId)
+        .where('groupId', isEqualTo: groupId);
+
+    try {
+      final querySnapshot = await memberRef.get();
+
+      if (querySnapshot.docs.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Member not found.')));
+        return;
+      }
+
+      final docId = querySnapshot.docs.first.id;
+      final docRef = FirebaseFirestore.instance
+          .collection('groupmembers')
+          .doc(docId);
+
+      switch (choice) {
+        case 'Promote':
+          await docRef.update({'role': 'co-admin'});
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('User promoted to co-admin.')));
+          break;
+
+        case 'Demote':
+          await docRef.update({'role': 'member'});
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('User demoted to member.')));
+          break;
+
+        case 'Remove':
+          await docRef.delete();
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('User removed from group.')));
+          break;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -153,7 +197,12 @@ class _MemberTabState extends ConsumerState<MemberTab> {
                   right: 0,
                   child: PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert),
-                    onSelected: (choice) => _onMemberMenuSelected(choice),
+                    onSelected:
+                        (choice) => _onMemberMenuSelected(
+                          choice,
+                          memberId,
+                          widget.groupId,
+                        ),
                     itemBuilder: (context) {
                       List<PopupMenuEntry<String>> items = [];
 
@@ -175,12 +224,11 @@ class _MemberTabState extends ConsumerState<MemberTab> {
                         );
                       }
 
-                      // 'Remove' option is available for both member and co-admin
                       if (role == 'member' || role == 'co-admin') {
                         items.add(
                           const PopupMenuItem<String>(
                             value: 'Remove',
-                            child: Text('Remove to Group'),
+                            child: Text('Remove from Group'),
                           ),
                         );
                       }

@@ -17,7 +17,6 @@ class GroupScreen extends ConsumerStatefulWidget {
   final String? groupId;
   final String? groupName;
   final bool? isAdmin;
-  final String? role;
 
   const GroupScreen({
     super.key,
@@ -25,7 +24,6 @@ class GroupScreen extends ConsumerStatefulWidget {
     this.groupId,
     this.groupName,
     this.isAdmin,
-    this.role,
   });
 
   @override
@@ -36,7 +34,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   int _selectedIndex = 0;
   late String groupId = widget.groupId!;
   late String groupName = widget.groupName!;
-  late String role = widget.role!.toLowerCase();
   late bool isAdmin = widget.isAdmin!;
   final expenseTitleController = TextEditingController();
   final expenseDescriptionController = TextEditingController();
@@ -54,74 +51,104 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
   final user = FirebaseAuth.instance.currentUser;
   Map<String, dynamic>? _selectedGroup;
+  late String currentRole = 'member';
+  bool isLoadingRole = true;
 
   @override
   void initState() {
     super.initState();
+    groupId = widget.groupId ?? '';
+    getUserRole(groupId);
+  }
 
-    groupId = widget.groupId!;
-    late String role = widget.role!.toLowerCase();
+  Future<void> getUserRole(String groupId) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onUpdateAppBar(
-        AppBar(
-          title: Text(
-            groupName,
-            style: const TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.green,
-          centerTitle: true,
-          actions: [
-            IconButton(icon: const Icon(Icons.notifications), onPressed: null),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (choice) => _onMenuSelected(choice, groupId),
-              itemBuilder: (context) {
-                return [
-                  const PopupMenuItem(
-                    value: 'Add Expense',
-                    child: Text('Add Expense'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'Add TODO',
-                    child: Text('Add TODO'),
-                  ),
-                  if (role != 'admin')
-                    const PopupMenuItem(
-                      value: 'Leave Group',
-                      child: Text('Leave Group'),
-                    ),
-                  if (role == 'admin')
-                    const PopupMenuItem(
-                      value: 'Edit Group',
-                      child: Text('Edit Group'),
-                    ),
-                  if (role == 'admin')
-                    const PopupMenuItem(
-                      value: 'Delete Group',
-                      child: Text('Delete Group'),
-                    ),
-                  if (role == 'admin' || role == 'co-admin') ...[
-                    const PopupMenuItem(
-                      value: 'View Group Code',
-                      child: Text('View Group Code'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'Invite Member',
-                      child: Text('Invite Member'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'Group Log',
-                      child: Text('Group Log'),
-                    ),
-                  ],
-                ];
-              },
-            ),
-          ],
+    try {
+      final query =
+          await FirebaseFirestore.instance
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .where('userId', isEqualTo: userId)
+              .limit(1)
+              .get();
+
+      if (query.docs.isNotEmpty) {
+        setState(() {
+          currentRole =
+              (query.docs.first.data()['role'] as String?)?.toLowerCase() ??
+              'member';
+          isLoadingRole = false;
+        });
+      } else {
+        setState(() {
+          currentRole = 'member';
+          isLoadingRole = false;
+        });
+      }
+      updateAppBar(); // ← Now update after the role is set
+    } catch (e) {
+      print('Error fetching user role: $e');
+    }
+  }
+
+  void updateAppBar() {
+    widget.onUpdateAppBar(
+      AppBar(
+        title: Text(
+          groupName,
+          style: const TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
         ),
-      );
-    });
+        backgroundColor: Colors.green,
+        centerTitle: true,
+        actions: [
+          IconButton(icon: const Icon(Icons.notifications), onPressed: null),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (choice) => _onMenuSelected(choice, groupId),
+            itemBuilder: (context) {
+              return [
+                const PopupMenuItem(
+                  value: 'Add Expense',
+                  child: Text('Add Expense'),
+                ),
+                const PopupMenuItem(value: 'Add TODO', child: Text('Add TODO')),
+                if (currentRole != 'admin')
+                  const PopupMenuItem(
+                    value: 'Leave Group',
+                    child: Text('Leave Group'),
+                  ),
+                if (currentRole == 'admin')
+                  const PopupMenuItem(
+                    value: 'Edit Group',
+                    child: Text('Edit Group'),
+                  ),
+                if (currentRole == 'admin')
+                  const PopupMenuItem(
+                    value: 'Delete Group',
+                    child: Text('Delete Group'),
+                  ),
+                if (currentRole == 'admin' || currentRole == 'co-admin') ...[
+                  const PopupMenuItem(
+                    value: 'View Group Code',
+                    child: Text('View Group Code'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'Invite Member',
+                    child: Text('Invite Member'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'Group Log',
+                    child: Text('Group Log'),
+                  ),
+                ],
+              ];
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -591,6 +618,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     try {
       final groupId = _selectedGroup?['groupId'];
       if (groupId == null) return;
+      
+      await getUserRole(groupId);
 
       final groupRef = FirebaseFirestore.instance
           .collection('groups')
@@ -627,22 +656,23 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                       value: 'Add TODO',
                       child: Text('Add TODO'),
                     ),
-                    if (role != 'admin')
+                    if (currentRole != 'admin')
                       const PopupMenuItem(
                         value: 'Leave Group',
                         child: Text('Leave Group'),
                       ),
-                    if (role == 'admin')
+                    if (currentRole == 'admin')
                       const PopupMenuItem(
                         value: 'Edit Group',
                         child: Text('Edit Group'),
                       ),
-                    if (role == 'admin')
+                    if (currentRole == 'admin')
                       const PopupMenuItem(
                         value: 'Delete Group',
                         child: Text('Delete Group'),
                       ),
-                    if (role == 'admin' || role == 'co-admin') ...[
+                    if (currentRole == 'admin' ||
+                        currentRole == 'co-admin') ...[
                       const PopupMenuItem(
                         value: 'View Group Code',
                         child: Text('View Group Code'),

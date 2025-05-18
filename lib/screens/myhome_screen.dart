@@ -441,17 +441,16 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                 runSpacing: 12,
                 children:
                     groups.map((group) {
-                      final String role = (group['role'] as String).toLowerCase();
+                      final String role =
+                          (group['role'] as String).toLowerCase();
                       return GestureDetector(
                         onTap: () {
                           widget.onGroupTap({
                             'groupId': group['groupId'],
                             'groupName': group['groupName'],
                             'isAdmin': group['isAdmin'],
-                            'role': group['role'], // added role here
                           });
                         },
-
                         child: Stack(
                           children: [
                             Container(
