@@ -1,14 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/user_and_group_providers.dart';
-import 'package:costmate/screens/invite_screen.dart';
 import 'package:costmate/validation/validation_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class MyHomeScreen extends ConsumerStatefulWidget {
-  const MyHomeScreen({
+class SettingsScreen extends ConsumerStatefulWidget {
+  const SettingsScreen({
     super.key,
     required this.onUpdateAppBar,
     required this.onGroupTap,
@@ -18,19 +17,14 @@ class MyHomeScreen extends ConsumerStatefulWidget {
   final void Function(Map<String, dynamic> group) onGroupTap;
 
   @override
-  ConsumerState<MyHomeScreen> createState() => _MyHomeScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController groupCodeController = TextEditingController();
   final TextEditingController groupNameController = TextEditingController();
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-  final userId = FirebaseAuth.instance.currentUser;
   Map<String, dynamic>? _selectedGroup;
-  final timestamp = FieldValue.serverTimestamp();
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
-  String? action;
 
   @override
   void initState() {
@@ -160,99 +154,23 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     );
   }
 
-  void _onGroupMenuSelected(String choice, Map<String, dynamic> group) async {
+  void _onGroupMenuSelected(String choice, Map<String, dynamic> group) {
     setState(() {
       _selectedGroup = group;
     });
 
-    final firestore = FirebaseFirestore.instance;
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final userId = currentUser?.uid;
-    final groupId = group['id'];
-    final groupName = group['name'];
-    final timestamp = Timestamp.now();
-
-    if (userId == null || groupId == null) return;
-
-    // Leave Group
     if (choice == 'Leave Group') {
-      await _showLeaveGroupDialog();
-
-      final actionGroup = 'left the group "$groupName"';
-      final notificationGroupData = {
-        'userId': userId,
-        'groupId': groupId,
-        'action': actionGroup,
-        'createdAt': timestamp,
-      };
-
-      await firestore
-          .collection('groupnotifications')
-          .add(notificationGroupData);
-    }
-    // Edit Group
-    else if (choice == 'Edit Group') {
-      await _showEditGroupDialog();
-
-      final actionGroup = 'edited the group "$groupName"';
-      final notificationGroupData = {
-        'userId': userId,
-        'groupId': groupId,
-        'action': actionGroup,
-        'createdAt': timestamp,
-      };
-
-      await firestore
-          .collection('groupnotifications')
-          .add(notificationGroupData);
-    }
-    // Delete Group
-    else if (choice == 'Delete Group') {
-      await _showDeleteGroupDialog();
-
-      final actionUser = 'The group "$groupName" has been deleted';
-
-      // Get all users in the group (assuming you have this subcollection or field)
-      final membersSnapshot =
-          await firestore
-              .collection('groups')
-              .doc(groupId)
-              .collection('members')
-              .get();
-
-      for (var doc in membersSnapshot.docs) {
-        final memberId = doc.id;
-        final notificationUserData = {
-          'userId': memberId,
-          'groupId': groupId,
-          'action': actionUser,
-          'createdAt': timestamp,
-        };
-
-        await firestore
-            .collection('usernotifications')
-            .add(notificationUserData);
-      }
-    }
-    // View Group Code (no notification needed)
-    else if (choice == 'View Group Code') {
-      await _showViewGroupCodeDialog();
-    } 
-    else if (choice == 'Invite Member') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) => InviteScreen(
-                groupId: groupId,
-                currentUserId: userId,
-              ),
-        ),
-      );
+      _showLeaveGroupDialog();
+    } else if (choice == 'Delete Group') {
+      _showDeleteGroupDialog();
+    } else if (choice == 'Edit Group') {
+      _showEditGroupDialog();
+    } else if (choice == 'View Group Code') {
+      _showViewGroupCodeDialog();
     }
   }
 
-  Future<void> _showViewGroupCodeDialog() async {
+  void _showViewGroupCodeDialog() async {
     final groupId = _selectedGroup?['groupId'];
     if (groupId == null) return;
 
@@ -313,7 +231,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     }
   }
 
-  Future<void> _showLeaveGroupDialog() async {
+  void _showLeaveGroupDialog() {
     showDialog(
       context: context,
       builder:
@@ -337,7 +255,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     );
   }
 
-  Future<void> _leaveGroup() async {
+  void _leaveGroup() async {
     try {
       final groupId = _selectedGroup?['groupId'];
       if (groupId == null) return;
@@ -377,7 +295,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     }
   }
 
-  Future<void> _showDeleteGroupDialog() async {
+  void _showDeleteGroupDialog() {
     showDialog(
       context: context,
       builder:
@@ -430,7 +348,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     }
   }
 
-  Future<void> _showEditGroupDialog() async {
+  void _showEditGroupDialog() {
     final TextEditingController groupNameController = TextEditingController();
 
     showDialog(
@@ -609,6 +527,10 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                                       const PopupMenuItem<String>(
                                         value: 'Invite Member',
                                         child: Text('Invite Member'),
+                                      ),
+                                      const PopupMenuItem<String>(
+                                        value: 'Group Log',
+                                        child: Text('Group Log'),
                                       ),
                                     ],
                                   ];

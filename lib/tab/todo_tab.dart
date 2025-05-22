@@ -68,21 +68,43 @@ class _TodoTabState extends ConsumerState<TodoTab> {
     Map<String, dynamic> todoData,
     String todoId,
   ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final groupId = todoData['groupId'];
+
+    if (user == null || groupId == null) return;
+
     switch (choice) {
       case 'Edit TODO':
         _showEditTODODialog(
           todoId: todoId,
-          groupId: todoData['groupId'],
+          groupId: groupId,
           currentTitle: todoData['todoTitle'],
           currentDueDate: todoData['dueDate'], // Firestore Timestamp
           currentDescription: todoData['description'] ?? '',
         );
+
+        // Send edit notification
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'edited a TODO: ${todoData['todoTitle']}',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
+
       case 'Delete TODO':
         _showDeleteTODODialog(
           todoId: todoId,
           title: todoData['todoTitle'] ?? 'Untitled',
         );
+
+        // Send delete notification
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'deleted a TODO: ${todoData['todoTitle']}',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
     }
   }
@@ -431,11 +453,6 @@ class _TodoTabState extends ConsumerState<TodoTab> {
           if (createdById != null) {
             _userIdToName[createdById] = createdByName;
           }
-
-          // Cache user role to bool for example
-          // final role = todo['currentUserRole'] as String? ?? 'Member';
-          // _groupIdToIsAdmin[widget.groupId] =
-          //     (role == 'Admin' || role == 'Owner');
         }
 
         return Center(
@@ -541,8 +558,9 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                                             context,
                                             MaterialPageRoute(
                                               builder:
-                                                  (context) =>
-                                                      TodoScreen(todoId: todoId),
+                                                  (context) => TodoScreen(
+                                                    todoId: todoId,
+                                                  ),
                                             ),
                                           );
                                         },

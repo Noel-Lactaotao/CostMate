@@ -1,4 +1,6 @@
 import 'package:costmate/providers/user_and_group_providers.dart';
+import 'package:costmate/screens/groupnotification_screen.dart';
+import 'package:costmate/screens/invite_screen.dart';
 import 'package:costmate/screens/main_screen.dart';
 import 'package:costmate/tab/expense_tab.dart';
 import 'package:costmate/tab/member_tab.dart';
@@ -103,7 +105,21 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         backgroundColor: Colors.green,
         centerTitle: true,
         actions: [
-          IconButton(icon: const Icon(Icons.notifications), onPressed: null),
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => GroupNotificationScreen(
+                        groupId: groupId, // <-- pass actual group ID here
+                      ),
+                ),
+              );
+            },
+          ),
+
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (choice) => _onMenuSelected(choice, groupId),
@@ -138,10 +154,10 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                     value: 'Invite Member',
                     child: Text('Invite Member'),
                   ),
-                  const PopupMenuItem(
-                    value: 'Group Log',
-                    child: Text('Group Log'),
-                  ),
+                  // const PopupMenuItem(
+                  //   value: 'Group Log',
+                  //   child: Text('Group Log'),
+                  // ),
                 ],
               ];
             },
@@ -161,30 +177,100 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     super.dispose();
   }
 
-  void _onMenuSelected(String choice, String groupId) {
+  void _onMenuSelected(String choice, String groupId) async {
+    final firestore = FirebaseFirestore.instance;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final userId = currentUser.uid;
+    final timestamp = Timestamp.now();
+
     switch (choice) {
       case 'Add Expense':
         _showAddExpense(groupId);
+
+        await firestore.collection('groupnotifications').add({
+          'userId': userId,
+          'groupId': groupId,
+          'action': 'added an expense to the group',
+          'createdAt': timestamp,
+        });
         break;
+
       case 'Add TODO':
         _showAddTODOList();
+
+        await firestore.collection('groupnotifications').add({
+          'userId': userId,
+          'groupId': groupId,
+          'action': 'added a TODO item to the group',
+          'createdAt': timestamp,
+        });
         break;
+
       case 'Leave Group':
         _showLeaveGroupDialog();
+
+        await firestore.collection('groupnotifications').add({
+          'userId': userId,
+          'groupId': groupId,
+          'action': 'left the group',
+          'createdAt': timestamp,
+        });
         break;
+
+      case 'Edit Group':
+        _showEditGroupDialog();
+
+        await firestore.collection('groupnotifications').add({
+          'userId': userId,
+          'groupId': groupId,
+          'action': 'edited the group settings',
+          'createdAt': timestamp,
+        });
+        break;
+
+      case 'Delete Group':
+        _showDeleteGroupDialog();
+
+        final memberDoc =
+            await firestore.collection('groupmembers').doc(groupId).get();
+
+        final membersData = memberDoc.data();
+        if (membersData != null) {
+          final List<String> memberIds = List<String>.from(
+            membersData['members'] ?? [],
+          );
+
+          for (final memberId in memberIds) {
+            await firestore.collection('usernotifications').add({
+              'userId': memberId,
+              'groupId': groupId,
+              'action': 'A group you were part of has been deleted.',
+              'createdAt': timestamp,
+            });
+          }
+        }
+        break;
+
       case 'Invite Members':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) =>
+                    InviteScreen(groupId: groupId, currentUserId: userId),
+          ),
+        );
         break;
+
       case 'View Group Code':
         _showViewGroupCodeDialog();
         break;
-      case 'Group Log':
-        break;
-      case 'Edit Group':
-        _showEditGroupDialog();
-        break;
-      case 'Delete Group':
-        _showDeleteGroupDialog();
-        break;
+
+      // case 'Group Log':
+      //   // No notification needed
+      //   break;
     }
   }
 
@@ -618,7 +704,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     try {
       final groupId = _selectedGroup?['groupId'];
       if (groupId == null) return;
-      
+
       await getUserRole(groupId);
 
       final groupRef = FirebaseFirestore.instance
@@ -681,10 +767,10 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                         value: 'Invite Member',
                         child: Text('Invite Member'),
                       ),
-                      const PopupMenuItem(
-                        value: 'Group Log',
-                        child: Text('Group Log'),
-                      ),
+                      // const PopupMenuItem(
+                      //   value: 'Group Log',
+                      //   child: Text('Group Log'),
+                      // ),
                     ],
                   ],
             ),

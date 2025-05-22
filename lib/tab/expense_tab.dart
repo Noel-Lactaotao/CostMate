@@ -305,24 +305,44 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
     String choice,
     Map<String, dynamic> expenseData,
     String expenseId,
-  ) {
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final groupId = expenseData['groupId'];
+
+    if (user == null || groupId == null) return;
+
+    final expenseTitle = expenseData['expenseTitle'] ?? 'Untitled';
+
     switch (choice) {
       case 'Edit Expense':
         _showEditExpenseDialog(
           expenseId: expenseId,
-          groupId: expenseData['groupId'],
-          currentTitle: expenseData['expenseTitle'] ?? '',
+          groupId: groupId,
+          currentTitle: expenseTitle,
           currentAmount: expenseData['expenseAmount']?.toString() ?? '0.0',
           currentDescription: expenseData['expenseDescription'] ?? '',
           currentPaidBy: expenseData['paidBy'],
         );
+
+        // Add notification for edit
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'edited the expense: $expenseTitle',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
 
       case 'Delete Expense':
-        _showDeleteExpenseDialog(
-          expenseId: expenseId,
-          title: expenseData['expenseTitle'] ?? 'Untitled',
-        );
+        _showDeleteExpenseDialog(expenseId: expenseId, title: expenseTitle);
+
+        // Add notification for delete
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'deleted the expense: $expenseTitle',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
     }
   }

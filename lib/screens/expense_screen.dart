@@ -82,7 +82,15 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
     String choice,
     Map<String, dynamic> expenseData,
     String expenseId,
-  ) {
+  ) async {
+
+    final user = FirebaseAuth.instance.currentUser;
+    final groupId = expenseData['groupId'];
+
+    if (user == null || groupId == null) return;
+
+    final expenseTitle = expenseData['expenseTitle'] ?? 'Untitled';
+
     switch (choice) {
       case 'Edit Expense':
         _showEditExpenseDialog(
@@ -93,6 +101,13 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
           currentDescription: expenseData['expenseDescription'] ?? '',
           currentPaidBy: expenseData['paidBy'],
         );
+
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'edited the expense: $expenseTitle',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
 
       case 'Delete Expense':
@@ -100,6 +115,13 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
           expenseId: expenseId,
           title: expenseData['expenseTitle'] ?? 'Untitled',
         );
+
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'deleted the expense: $expenseTitle',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
     }
   }
@@ -412,7 +434,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                     backgroundColor: Colors.green,
                     centerTitle: true,
                     actions: [
-                      if (isAdminOrCoAdmin || isOwner)
+                      if (isAdminOrCoAdmin || isOwner && status =='pending')
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.more_vert),
                           onSelected:

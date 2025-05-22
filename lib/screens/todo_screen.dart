@@ -48,7 +48,12 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     String choice,
     Map<String, dynamic> todoData,
     String todoId,
-  ) {
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final groupId = todoData['groupId'];
+
+    if (user == null || groupId == null) return;
+
     switch (choice) {
       case 'Edit Todo':
         _showEditTodoDialog(
@@ -58,6 +63,14 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
           currentDueDate: todoData['dueDate'], // Firestore Timestamp
           currentDescription: todoData['description'] ?? '',
         );
+
+        // Send edit notification
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'edited a TODO: ${todoData['todoTitle']}',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
 
       case 'Delete Todo':
@@ -65,6 +78,13 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
           todoId: todoId,
           title: todoData['todoTitle'] ?? 'Untitled',
         );
+
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'action': 'deleted a TODO: ${todoData['todoTitle']}',
+          'userId': user.uid,
+          'groupId': groupId,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         break;
     }
   }

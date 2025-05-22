@@ -21,6 +21,9 @@ class _MemberTabState extends ConsumerState<MemberTab> {
     String selectedUserId,
     String groupId,
   ) async {
+    final timestamp = FieldValue.serverTimestamp();
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
     final memberRef = FirebaseFirestore.instance
         .collection('groupmembers')
         .where('userId', isEqualTo: selectedUserId)
@@ -41,27 +44,59 @@ class _MemberTabState extends ConsumerState<MemberTab> {
           .collection('groupmembers')
           .doc(docId);
 
+      String? actionUser;
+      String? actionGroup;
+
       switch (choice) {
         case 'Promote':
           await docRef.update({'role': 'co-admin'});
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('User promoted to co-admin.')));
+          actionUser = 'You have been Promoted to Co-Admin';
+          actionGroup = 'Promoted to Co-Admin';
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User promoted to co-admin.')),
+          );
           break;
 
         case 'Demote':
           await docRef.update({'role': 'member'});
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('User demoted to member.')));
+          actionUser = 'You have been Demoted to Member';
+          actionGroup = 'Demoted to Member';
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User demoted to member.')),
+          );
           break;
 
         case 'Remove':
           await docRef.delete();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('User removed from group.')));
+          actionUser = 'You have been Removed from the group';
+          actionGroup = 'Removed';
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User removed from group.')),
+          );
           break;
+      }
+
+      if (actionUser != null) {
+        final notificationUserData = {
+          'userId': selectedUserId,
+          'groupId': groupId,
+          'action': actionUser,
+          'createdAt': timestamp,
+        };
+        // Add to usernotifications
+        await firestore.collection('usernotifications').add(notificationUserData);
+
+      }
+
+      if (actionGroup != null) {
+        final notificationGroupData = {
+          'userId': selectedUserId,
+          'groupId': groupId,
+          'action': actionGroup,
+          'createdAt': timestamp,
+        };
+        // Add to groupnotifications
+        await firestore.collection('groupnotifications').add(notificationGroupData);
       }
     } catch (e) {
       ScaffoldMessenger.of(

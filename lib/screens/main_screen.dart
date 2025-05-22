@@ -3,6 +3,8 @@ import 'package:costmate/auth/signin_screen.dart';
 import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/screens/group_screen.dart';
 import 'package:costmate/screens/myhome_screen.dart';
+import 'package:costmate/screens/usernotification_screen.dart';
+import 'package:costmate/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,6 +45,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     _screens = [
       MyHomeScreen(onUpdateAppBar: _updateAppBar, onGroupTap: _onGroupTap),
       GroupScreen(onUpdateAppBar: _updateAppBar),
+      UserNotificationScreen(
+        onUpdateAppBar: _updateAppBar,
+        onGroupTap: _onGroupTap,
+      ),
+      SettingsScreen(onUpdateAppBar: _updateAppBar, onGroupTap: _onGroupTap),
     ];
   }
 
@@ -298,17 +305,34 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                       if (hasJoinedGroups && _isJoinedExpanded)
                         const Divider(height: 5),
 
-                      const ListTile(
-                        leading: Icon(Icons.feedback),
-                        title: Text('Feedback'),
+                      ListTile(
+                        leading: const Icon(Icons.notifications),
+                        title: const Text('Notification'),
+                        selected: _selectedDrawerItem == 'Notification',
+                        selectedTileColor: Colors.green.shade100,
+                        onTap: () {
+                          setState(() {
+                            _selectedIndex = 2;
+                            _selectedDrawerItem = 'Notification';
+                            _selectedDrawerGroupId = null;
+                          });
+                          Navigator.pop(context);
+                        },
                       ),
-                      const ListTile(
-                        leading: Icon(Icons.notifications),
-                        title: Text('Notification'),
-                      ),
-                      const ListTile(
-                        leading: Icon(Icons.settings),
-                        title: Text('Settings'),
+
+                      ListTile(
+                        leading: const Icon(Icons.settings),
+                        title: const Text('Settings'),
+                        selected: _selectedDrawerItem == 'Settings',
+                        selectedTileColor: Colors.green.shade100,
+                        onTap: () {
+                          setState(() {
+                            _selectedIndex = 3;
+                            _selectedDrawerItem = 'Settings';
+                            _selectedDrawerGroupId = null;
+                          });
+                          Navigator.pop(context);
+                        },
                       ),
                     ],
                   ),
