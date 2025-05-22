@@ -25,16 +25,23 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
   }
 
   Future<String> getUserRole(String groupId, String userId) async {
-    final doc =
-        await FirebaseFirestore.instance
-            .collection('groups')
-            .doc(groupId)
-            .get();
-    final data = doc.data();
-    if (data == null) return 'none';
-    if (data['adminId'] == userId) return 'admin';
-    if ((data['coAdmins'] ?? []).contains(userId)) return 'co-admin';
-    return 'member';
+    try {
+      final querySnapshot =
+          await FirebaseFirestore.instance
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .where('userId', isEqualTo: userId)
+              .limit(1)
+              .get();
+
+      if (querySnapshot.docs.isEmpty) return 'none';
+
+      final data = querySnapshot.docs.first.data();
+      return data['role'] ?? 'none';
+    } catch (e) {
+      debugPrint('Error getting user role: $e');
+      return 'none';
+    }
   }
 
   void _onMenuSelected(
@@ -297,8 +304,6 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 600;
-    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
-
     final todoAsync = ref.watch(singleTodoProvider(widget.todoId));
 
     return todoAsync.when(
@@ -323,10 +328,25 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
         final date = (todo['createdAt'] as Timestamp?)?.toDate();
         final relativeTime =
             date != null ? timeago.format(date) : 'Unknown time';
+        final String createdByUid = todo['createdBy'] ?? '';
+
+        final currentUser = FirebaseAuth.instance.currentUser;
+        final String userId = currentUser?.uid ?? '';
+        final bool isOwner = userId == createdByUid;
 
         return FutureBuilder<String>(
           future: getUserRole(groupId, userId),
           builder: (context, roleSnapshot) {
+            if (roleSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (roleSnapshot.hasError) {
+              return const Center(child: Text('Error loading role'));
+            }
+
+            final role = roleSnapshot.data ?? 'none';
+            final isAdminOrCoAdmin = (role == 'admin' || role == 'co-admin');
             return FutureBuilder<String>(
               future: getGroupName(groupId),
               builder: (context, groupSnapshot) {
@@ -347,26 +367,24 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
                     backgroundColor: Colors.green,
                     centerTitle: true,
                     actions: [
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        onSelected:
-                            (choice) => _onMenuSelected(
-                              choice,
-                              todo,
-                              todo['id'],
-                            ),
-                        itemBuilder:
-                            (context) => const [
-                              PopupMenuItem<String>(
-                                value: 'Edit Todo',
-                                child: Text('Edit'),
-                              ),
-                              PopupMenuItem<String>(
-                                value: 'Delete Todo',
-                                child: Text('Delete'),
-                              ),
-                            ],
-                      ),
+                      if (isAdminOrCoAdmin || isOwner)
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected:
+                              (choice) =>
+                                  _onMenuSelected(choice, todo, todo['id']),
+                          itemBuilder:
+                              (context) => const [
+                                PopupMenuItem<String>(
+                                  value: 'Edit Todo',
+                                  child: Text('Edit'),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'Delete Todo',
+                                  child: Text('Delete'),
+                                ),
+                              ],
+                        ),
                     ],
                   ),
                   body: SingleChildScrollView(
@@ -428,6 +446,23 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
                               const Icon(Icons.access_time),
                               'Created At',
                               relativeTime,
+                            ),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                },
+                                icon: const Icon(Icons.check),
+                                label: const Text('Approve'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  textStyle: const TextStyle(fontSize: 16),
+                                ),
+                              ),
                             ),
                           ],
                         ),

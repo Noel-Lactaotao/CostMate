@@ -49,21 +49,18 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
 
   Future<String> getUserRole(String groupId, String userId) async {
     try {
-      final groupDoc =
+      final querySnapshot =
           await FirebaseFirestore.instance
-              .collection('groups')
-              .doc(groupId)
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .where('userId', isEqualTo: userId)
+              .limit(1)
               .get();
 
-      final groupData = groupDoc.data();
-      if (groupData == null) return 'none';
+      if (querySnapshot.docs.isEmpty) return 'none';
 
-      if (groupData['adminId'] == userId) return 'admin';
-
-      final coAdmins = List<String>.from(groupData['coAdmins'] ?? []);
-      if (coAdmins.contains(userId)) return 'co-admin';
-
-      return 'member';
+      final data = querySnapshot.docs.first.data();
+      return data['role'] ?? 'none';
     } catch (e) {
       debugPrint('Error getting user role: $e');
       return 'none';
@@ -354,8 +351,9 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
 
     return expenseAsync.when(
       data: (expense) {
-        if (expense == null)
+        if (expense == null) {
           return const Center(child: Text('Expense not found'));
+        }
 
         final date = (expense['createdAt'] as Timestamp?)?.toDate();
         final relativeTime =
@@ -366,6 +364,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                 : 'Unknown date';
 
         final expenseId = expense['expenseId'];
+
         final String title = expense['expenseTitle'] ?? 'Untitled';
         final String groupId = expense['groupId'] ?? '';
         final String paidBy = expense['expensePaidBy'] ?? 'Unknown';
@@ -377,13 +376,21 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
 
         final currentUser = FirebaseAuth.instance.currentUser;
         final String userId = currentUser?.uid ?? '';
+        final bool isOwner = userId == createdByUid;
 
         return FutureBuilder<String>(
           future: getUserRole(groupId, userId),
           builder: (context, roleSnapshot) {
-            final isAdminOrCoAdmin =
-                (roleSnapshot.data == 'admin' ||
-                    roleSnapshot.data == 'co-admin');
+            if (roleSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (roleSnapshot.hasError) {
+              return const Center(child: Text('Error loading role'));
+            }
+
+            final role = roleSnapshot.data ?? 'none';
+            final isAdminOrCoAdmin = (role == 'admin' || role == 'co-admin');
 
             return FutureBuilder<String>(
               future: getGroupName(groupId),
@@ -405,23 +412,27 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                     backgroundColor: Colors.green,
                     centerTitle: true,
                     actions: [
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_vert),
-                        onSelected:
-                            (choice) =>
-                                _onMenuSelected(choice, expense, expense['id']),
-                        itemBuilder:
-                            (context) => const [
-                              PopupMenuItem<String>(
-                                value: 'Edit Expense',
-                                child: Text('Edit'),
+                      if (isAdminOrCoAdmin || isOwner)
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected:
+                              (choice) => _onMenuSelected(
+                                choice,
+                                expense,
+                                expense['id'],
                               ),
-                              PopupMenuItem<String>(
-                                value: 'Delete Expense',
-                                child: Text('Delete'),
-                              ),
-                            ],
-                      ),
+                          itemBuilder:
+                              (context) => const [
+                                PopupMenuItem<String>(
+                                  value: 'Edit Expense',
+                                  child: Text('Edit'),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'Delete Expense',
+                                  child: Text('Delete'),
+                                ),
+                              ],
+                        ),
                     ],
                   ),
                   body: SingleChildScrollView(
