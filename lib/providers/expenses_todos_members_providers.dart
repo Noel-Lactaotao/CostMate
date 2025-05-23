@@ -8,8 +8,6 @@ import 'package:rxdart/rxdart.dart';
 final expensesProvider =
     StreamProvider.family<List<Map<String, dynamic>>, String>((ref, groupId) {
       final firestore = FirebaseFirestore.instance;
-      final currentUserId =
-          FirebaseAuth.instance.currentUser?.uid; // Read fresh here!
 
       final expenseSnapshots =
           firestore
@@ -19,27 +17,29 @@ final expensesProvider =
 
       return expenseSnapshots.switchMap((snapshot) {
         final docs = snapshot.docs;
+        final currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
         if (docs.isEmpty || currentUserId == null) return Stream.value([]);
 
-        // Get current user's role in this group
+        // Current user's role in this group
         final currentUserRoleStream = firestore
             .collection('groupmembers')
             .where('groupId', isEqualTo: groupId)
             .where('userId', isEqualTo: currentUserId)
             .limit(1)
             .snapshots()
-            .map<String>((snap) {
-              if (snap.docs.isNotEmpty) {
-                final role = snap.docs.first.data()['role'];
-                return role ?? 'Member';
-              } else {
-                return 'Member';
-              }
+            .map((snap) {
+              final role =
+                  snap.docs.isNotEmpty
+                      ? snap.docs.first.data()['role'] as String?
+                      : null;
+              return role ?? 'Member';
             });
 
-        // Enrich each expense with creator's info
-        final List<Stream<Map<String, dynamic>?>> enrichedStreams =
+        // To avoid duplicate lookups for same user
+        final Map<String, Stream<Map<String, dynamic>>> userCache = {};
+
+        List<Stream<Map<String, dynamic>>> enrichedStreams =
             docs.map((doc) {
               final data = doc.data();
               final docId = doc.id;
@@ -49,24 +49,32 @@ final expensesProvider =
                 return Stream.value({...data, 'id': docId});
               }
 
-              return firestore
-                  .collection('users')
-                  .doc(createdBy)
-                  .snapshots()
-                  .map((userDoc) {
-                    final userData = userDoc.data();
-                    return {
-                      ...data,
-                      'id': docId,
-                      'createdByName': userData?['name'] ?? 'Unknown',
-                      'createdByEmail': userData?['email'] ?? 'Unknown',
-                    };
-                  });
+              userCache.putIfAbsent(createdBy, () {
+                return firestore
+                    .collection('users')
+                    .doc(createdBy)
+                    .snapshots()
+                    .map((userDoc) {
+                      final userData = userDoc.data();
+                      return {
+                        'name': userData?['name'] ?? 'Unknown',
+                        'email': userData?['email'] ?? 'Unknown',
+                      };
+                    });
+              });
+
+              return userCache[createdBy]!.map((userInfo) {
+                return {
+                  ...data,
+                  'id': docId,
+                  'createdByName': userInfo['name'],
+                  'createdByEmail': userInfo['email'],
+                };
+              });
             }).toList();
 
-        // Combine all enriched expense streams and include current user role
         return Rx.combineLatest2<
-          List<Map<String, dynamic>?>,
+          List<Map<String, dynamic>>,
           String,
           List<Map<String, dynamic>>
         >(Rx.combineLatestList(enrichedStreams), currentUserRoleStream, (
@@ -74,7 +82,6 @@ final expensesProvider =
           currentUserRole,
         ) {
           return expenses
-              .whereType<Map<String, dynamic>>()
               .map(
                 (expense) => {...expense, 'currentUserRole': currentUserRole},
               )
@@ -238,27 +245,26 @@ final singleExpenseProvider =
           });
     });
 
-final singleTodoProvider =
-    StreamProvider.family<Map<String, dynamic>?, String>((ref, todoId) {
-  final firestore = FirebaseFirestore.instance;
+final singleTodoProvider = StreamProvider.family<Map<String, dynamic>?, String>(
+  (ref, todoId) {
+    final firestore = FirebaseFirestore.instance;
 
-  return firestore
-      .collection('TODO')
-      .doc(todoId)
-      .snapshots()
-      .asyncMap((doc) async {
-    final data = doc.data();
-    if (data == null) return null;
+    return firestore.collection('TODO').doc(todoId).snapshots().asyncMap((
+      doc,
+    ) async {
+      final data = doc.data();
+      if (data == null) return null;
 
-    final userDoc =
-        await firestore.collection('users').doc(data['createdBy']).get();
-    final userData = userDoc.data();
+      final userDoc =
+          await firestore.collection('users').doc(data['createdBy']).get();
+      final userData = userDoc.data();
 
-    return {
-      ...data,
-      'id': doc.id,
-      'createdByName': userData?['name'] ?? 'Unknown',
-      'createdByEmail': userData?['email'] ?? 'Unknown',
-    };
-  });
-});
+      return {
+        ...data,
+        'id': doc.id,
+        'createdByName': userData?['name'] ?? 'Unknown',
+        'createdByEmail': userData?['email'] ?? 'Unknown',
+      };
+    });
+  },
+);

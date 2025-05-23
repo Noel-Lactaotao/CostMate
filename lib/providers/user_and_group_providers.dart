@@ -146,6 +146,10 @@ final userGroupsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
 
     final allGroupIds = {...createdGroupIds, ...joinedGroupIds};
 
+    if (allGroupIds.isEmpty) {
+      return Stream.value(<Map<String, dynamic>>[]);
+    }
+
     // For each group, create a stream that combines the group doc and live member count
     final groupStreams = allGroupIds.map((groupId) {
       final groupDocStream =

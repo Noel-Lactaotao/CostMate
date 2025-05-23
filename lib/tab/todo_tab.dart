@@ -87,6 +87,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'edited a TODO: ${todoData['todoTitle']}',
           'userId': user.uid,
+          'type': 'message',
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -102,6 +103,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'deleted a TODO: ${todoData['todoTitle']}',
           'userId': user.uid,
+          'type': 'message',
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });

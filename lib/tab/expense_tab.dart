@@ -328,6 +328,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'edited the expense: $expenseTitle',
           'userId': user.uid,
+          'type': 'message',
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -340,6 +341,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'deleted the expense: $expenseTitle',
           'userId': user.uid,
+          'type': 'message',
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });

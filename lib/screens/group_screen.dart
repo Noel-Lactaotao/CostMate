@@ -183,6 +183,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         await firestore.collection('groupnotifications').add({
           'userId': userId,
           'groupId': groupId,
+          'type': 'message',
           'action': 'added an expense to the group',
           'createdAt': timestamp,
         });
@@ -194,6 +195,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         await firestore.collection('groupnotifications').add({
           'userId': userId,
           'groupId': groupId,
+          'type': 'message',
           'action': 'added a TODO item to the group',
           'createdAt': timestamp,
         });
@@ -205,6 +207,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         await firestore.collection('groupnotifications').add({
           'userId': userId,
           'groupId': groupId,
+          'type': 'message',
           'action': 'left the group',
           'createdAt': timestamp,
         });
@@ -216,6 +219,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'userId': user?.uid,
           'groupId': groupId,
+          'type': 'message',
           'action': 'edited the group name',
           'createdAt': Timestamp.now(),
         });
@@ -223,8 +227,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
       case 'Delete Group':
         _showDeleteGroupDialog();
-
-        final actionUser = 'The group "$groupName" has been deleted';
 
         final memberSnapshot =
             await firestore
@@ -238,20 +240,21 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           await firestore.collection('usernotifications').add({
             'userId': memberId,
             'groupId': groupId,
-            'action': actionUser,
+            'type': 'message',
+            'action': 'The group "$groupName" has been deleted',
             'createdAt': timestamp,
           });
         }
 
         break;
 
-      case 'Invite Members':
+      case 'Invite Member':
         Navigator.push(
           context,
           MaterialPageRoute(
             builder:
                 (context) =>
-                    InviteScreen(groupId: groupId, currentUserId: userId),
+                    InviteScreen(groupId: this.groupId),
           ),
         );
         break;

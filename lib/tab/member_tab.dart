@@ -93,6 +93,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
         final notificationUserData = {
           'userId': selectedUserId,
           'groupId': groupId,
+          'type': 'message',
           'action': actionUser,
           'createdAt': timestamp,
         };
@@ -106,6 +107,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
         final notificationGroupData = {
           'userId': selectedUserId,
           'groupId': groupId,
+          'type': 'message',
           'action': actionGroup,
           'createdAt': timestamp,
         };

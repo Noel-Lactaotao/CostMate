@@ -60,7 +60,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     });
   }
 
-  void _onMenuSelected(String choice) {
+  void _onMenuSelected(String choice) async {
     if (choice == 'Create Group') {
       _showCreateGroupDialog();
     } else if (choice == 'Join Group') {
@@ -141,6 +141,23 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                     final _ = ref.refresh(userGroupsProvider);
                   }
 
+                  final firestore = FirebaseFirestore.instance;
+                  final currentUser = FirebaseAuth.instance.currentUser;
+                  final String userId = currentUser!.uid;
+                  final timestamp = Timestamp.now();
+
+                  final notificationGroupData = {
+                    'userId': userId,
+                    'groupId': groupId,
+                    'type': 'message',
+                    'action': 'joined the group',
+                    'createdAt': timestamp,
+                  };
+
+                  await firestore
+                      .collection('groupnotifications')
+                      .add(notificationGroupData);
+
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(const SnackBar(content: Text("Joined Group")));
@@ -172,11 +189,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     if (choice == 'Leave Group') {
       await _showLeaveGroupDialog();
 
-      final actionGroup = 'left the group "$groupName"';
       final notificationGroupData = {
         'userId': userId,
         'groupId': groupId,
-        'action': actionGroup,
+        'type': 'message',
+        'action': 'left the group',
         'createdAt': timestamp,
       };
 
@@ -188,11 +205,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     else if (choice == 'Edit Group') {
       await _showEditGroupDialog();
 
-      final actionGroup = 'edited the group "$groupName"';
       final notificationGroupData = {
         'userId': userId,
         'groupId': groupId,
-        'action': actionGroup,
+        'type': 'message',
+        'action': 'edited the group',
         'createdAt': timestamp,
       };
 
@@ -203,8 +220,6 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     // Delete Group
     else if (choice == 'Delete Group') {
       await _showDeleteGroupDialog();
-
-      final actionUser = 'The group "$groupName" has been deleted';
 
       final memberSnapshot =
           await firestore
@@ -218,7 +233,8 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
         await firestore.collection('usernotifications').add({
           'userId': memberId,
           'groupId': groupId,
-          'action': actionUser,
+          'type': 'message',
+          'action': 'The group "$groupName" has been deleted',
           'createdAt': timestamp,
         });
       }
@@ -229,11 +245,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     } else if (choice == 'Invite Member') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder:
-              (context) =>
-                  InviteScreen(groupId: groupId, currentUserId: userId),
-        ),
+        MaterialPageRoute(builder: (context) => InviteScreen(groupId: groupId)),
       );
     }
   }

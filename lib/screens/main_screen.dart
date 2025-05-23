@@ -2,6 +2,7 @@ import 'package:costmate/auth/auth_service.dart';
 import 'package:costmate/auth/signin_screen.dart';
 import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/screens/group_screen.dart';
+import 'package:costmate/screens/invitation_screen.dart';
 import 'package:costmate/screens/myhome_screen.dart';
 import 'package:costmate/screens/usernotification_screen.dart';
 import 'package:costmate/screens/settings_screen.dart';
@@ -62,6 +63,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     _screens = [
       MyHomeScreen(onUpdateAppBar: _updateAppBar, onGroupTap: _onGroupTap),
       GroupScreen(onUpdateAppBar: _updateAppBar),
+      InvitationScreen(onUpdateAppBar: _updateAppBar, onGroupTap: _onGroupTap),
       UserNotificationScreen(
         onUpdateAppBar: _updateAppBar,
         onGroupTap: _onGroupTap,
@@ -321,6 +323,20 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                         ),
                       if (hasJoinedGroups && _isJoinedExpanded)
                         const Divider(height: 5),
+                      ListTile(
+                        leading: const Icon(Icons.email),
+                        title: const Text('Invitation'),
+                        selected: _selectedDrawerItem == 'Invitation',
+                        selectedTileColor: Colors.green.shade100,
+                        onTap: () {
+                          setState(() {
+                            _selectedIndex = 2;
+                            _selectedDrawerItem = 'Invitation';
+                            _selectedDrawerGroupId = null;
+                          });
+                          Navigator.pop(context);
+                        },
+                      ),
 
                       ListTile(
                         leading: const Icon(Icons.notifications),
@@ -329,13 +345,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                         selectedTileColor: Colors.green.shade100,
                         onTap: () {
                           setState(() {
-                            _selectedIndex = 2;
+                            _selectedIndex = 3;
                             _selectedDrawerItem = 'Notification';
                             _selectedDrawerGroupId = null;
                           });
                           Navigator.pop(context);
                         },
                       ),
+
 
                       ListTile(
                         leading: const Icon(Icons.settings),
@@ -344,7 +361,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                         selectedTileColor: Colors.green.shade100,
                         onTap: () {
                           setState(() {
-                            _selectedIndex = 3;
+                            _selectedIndex = 4;
                             _selectedDrawerItem = 'Settings';
                             _selectedDrawerGroupId = null;
                           });
