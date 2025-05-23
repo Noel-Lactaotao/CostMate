@@ -24,6 +24,19 @@ class _MemberTabState extends ConsumerState<MemberTab> {
     final timestamp = FieldValue.serverTimestamp();
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
+    final groupRef = FirebaseFirestore.instance
+        .collection('groups')
+        .where('groupId', isEqualTo: groupId);
+
+    final groupSnapshot = await groupRef.get();
+
+    String? groupName;
+
+    if (groupSnapshot.docs.isNotEmpty) {
+      final groupData = groupSnapshot.docs.first.data();
+      groupName = groupData['groupName'];
+    }
+
     final memberRef = FirebaseFirestore.instance
         .collection('groupmembers')
         .where('userId', isEqualTo: selectedUserId)
@@ -50,7 +63,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
       switch (choice) {
         case 'Promote':
           await docRef.update({'role': 'co-admin'});
-          actionUser = 'You have been Promoted to Co-Admin';
+          actionUser = 'You have been Promoted to Co-Admin in $groupName';
           actionGroup = 'Promoted to Co-Admin';
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('User promoted to co-admin.')),
@@ -59,7 +72,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
 
         case 'Demote':
           await docRef.update({'role': 'member'});
-          actionUser = 'You have been Demoted to Member';
+          actionUser = 'You have been Demoted to Member in $groupName';
           actionGroup = 'Demoted to Member';
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('User demoted to member.')),
@@ -68,7 +81,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
 
         case 'Remove':
           await docRef.delete();
-          actionUser = 'You have been Removed from the group';
+          actionUser = 'You have been Removed from $groupName';
           actionGroup = 'Removed';
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('User removed from group.')),
@@ -84,8 +97,9 @@ class _MemberTabState extends ConsumerState<MemberTab> {
           'createdAt': timestamp,
         };
         // Add to usernotifications
-        await firestore.collection('usernotifications').add(notificationUserData);
-
+        await firestore
+            .collection('usernotifications')
+            .add(notificationUserData);
       }
 
       if (actionGroup != null) {
@@ -96,7 +110,9 @@ class _MemberTabState extends ConsumerState<MemberTab> {
           'createdAt': timestamp,
         };
         // Add to groupnotifications
-        await firestore.collection('groupnotifications').add(notificationGroupData);
+        await firestore
+            .collection('groupnotifications')
+            .add(notificationGroupData);
       }
     } catch (e) {
       ScaffoldMessenger.of(
@@ -206,7 +222,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
 
     return Center(
       child: Container(
-        width: isWide ? 600 : double.infinity,
+        width: isWide ? 500 : double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Card(
           margin: const EdgeInsets.symmetric(vertical: 6),

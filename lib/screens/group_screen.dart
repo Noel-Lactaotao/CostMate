@@ -46,13 +46,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   String? selectedPaidBy;
   File? selectedProofImage;
-  List<String> memberList = [];
-  List<Map<String, dynamic>> membersList = [];
-  List<Map<String, dynamic>> expensesList = [];
-  List<Map<String, dynamic>> todoList = [];
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
   final user = FirebaseAuth.instance.currentUser;
-  Map<String, dynamic>? _selectedGroup;
   late String currentRole = 'member';
   bool isLoadingRole = true;
 
@@ -154,10 +149,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                     value: 'Invite Member',
                     child: Text('Invite Member'),
                   ),
-                  // const PopupMenuItem(
-                  //   value: 'Group Log',
-                  //   child: Text('Group Log'),
-                  // ),
                 ],
               ];
             },
@@ -182,7 +173,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    final userId = currentUser.uid;
+    final String userId = currentUser.uid;
     final timestamp = Timestamp.now();
 
     switch (choice) {
@@ -222,35 +213,36 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       case 'Edit Group':
         _showEditGroupDialog();
 
-        await firestore.collection('groupnotifications').add({
-          'userId': userId,
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'userId': user?.uid,
           'groupId': groupId,
-          'action': 'edited the group settings',
-          'createdAt': timestamp,
+          'action': 'edited the group name',
+          'createdAt': Timestamp.now(),
         });
         break;
 
       case 'Delete Group':
         _showDeleteGroupDialog();
 
-        final memberDoc =
-            await firestore.collection('groupmembers').doc(groupId).get();
+        final actionUser = 'The group "$groupName" has been deleted';
 
-        final membersData = memberDoc.data();
-        if (membersData != null) {
-          final List<String> memberIds = List<String>.from(
-            membersData['members'] ?? [],
-          );
+        final memberSnapshot =
+            await firestore
+                .collection('groupmembers')
+                .where('groupId', isEqualTo: groupId)
+                .get();
 
-          for (final memberId in memberIds) {
-            await firestore.collection('usernotifications').add({
-              'userId': memberId,
-              'groupId': groupId,
-              'action': 'A group you were part of has been deleted.',
-              'createdAt': timestamp,
-            });
-          }
+        for (final doc in memberSnapshot.docs) {
+          final memberId = doc['userId'];
+
+          await firestore.collection('usernotifications').add({
+            'userId': memberId,
+            'groupId': groupId,
+            'action': actionUser,
+            'createdAt': timestamp,
+          });
         }
+
         break;
 
       case 'Invite Members':
@@ -267,10 +259,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       case 'View Group Code':
         _showViewGroupCodeDialog();
         break;
-
-      // case 'Group Log':
-      //   // No notification needed
-      //   break;
     }
   }
 
@@ -565,8 +553,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   void _leaveGroup() async {
     try {
-      final groupId = _selectedGroup?['groupId'];
-      if (groupId == null) return;
+      final groupId = this.groupId;
 
       final groupMembersRef = FirebaseFirestore.instance
           .collection('groupmembers')
@@ -638,8 +625,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   Future<void> _deleteGroup() async {
     try {
-      final groupId = _selectedGroup?['groupId'];
-      if (groupId == null) return;
+      // final groupId = _selectedGroup?['groupId'];
+      final groupId = this.groupId;
 
       await ValidationService().deleteGroupWithSubcollections(groupId);
 
@@ -690,7 +677,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                   if (newGroupName.isNotEmpty) {
                     Navigator.pop(context); // Close the dialog
                     await _editGroup(newGroupName); // Update group name
-                    // NO navigation here anymore
                   }
                 },
                 child: const Text('Save'),
@@ -702,8 +688,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   Future<void> _editGroup(String newName) async {
     try {
-      final groupId = _selectedGroup?['groupId'];
-      if (groupId == null) return;
+      final groupId = this.groupId;
 
       await getUserRole(groupId);
 
@@ -718,7 +703,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         final _ = ref.refresh(userGroupsProvider);
       }
 
-      // Rebuild the updated AppBar title
       widget.onUpdateAppBar(
         AppBar(
           title: Text(
@@ -728,51 +712,60 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           backgroundColor: Colors.green,
           centerTitle: true,
           actions: [
-            // Keep the same popup menu
+            IconButton(
+              icon: Icon(Icons.notifications),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => GroupNotificationScreen(
+                          groupId: groupId, // <-- pass actual group ID here
+                        ),
+                  ),
+                );
+              },
+            ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (choice) => _onMenuSelected(choice, groupId),
-              itemBuilder:
-                  (context) => [
+              itemBuilder: (context) {
+                return [
+                  const PopupMenuItem(
+                    value: 'Add Expense',
+                    child: Text('Add Expense'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'Add TODO',
+                    child: Text('Add TODO'),
+                  ),
+                  if (currentRole != 'admin')
                     const PopupMenuItem(
-                      value: 'Add Expense',
-                      child: Text('Add Expense'),
+                      value: 'Leave Group',
+                      child: Text('Leave Group'),
+                    ),
+                  if (currentRole == 'admin')
+                    const PopupMenuItem(
+                      value: 'Edit Group',
+                      child: Text('Edit Group'),
+                    ),
+                  if (currentRole == 'admin')
+                    const PopupMenuItem(
+                      value: 'Delete Group',
+                      child: Text('Delete Group'),
+                    ),
+                  if (currentRole == 'admin' || currentRole == 'co-admin') ...[
+                    const PopupMenuItem(
+                      value: 'View Group Code',
+                      child: Text('View Group Code'),
                     ),
                     const PopupMenuItem(
-                      value: 'Add TODO',
-                      child: Text('Add TODO'),
+                      value: 'Invite Member',
+                      child: Text('Invite Member'),
                     ),
-                    if (currentRole != 'admin')
-                      const PopupMenuItem(
-                        value: 'Leave Group',
-                        child: Text('Leave Group'),
-                      ),
-                    if (currentRole == 'admin')
-                      const PopupMenuItem(
-                        value: 'Edit Group',
-                        child: Text('Edit Group'),
-                      ),
-                    if (currentRole == 'admin')
-                      const PopupMenuItem(
-                        value: 'Delete Group',
-                        child: Text('Delete Group'),
-                      ),
-                    if (currentRole == 'admin' ||
-                        currentRole == 'co-admin') ...[
-                      const PopupMenuItem(
-                        value: 'View Group Code',
-                        child: Text('View Group Code'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'Invite Member',
-                        child: Text('Invite Member'),
-                      ),
-                      // const PopupMenuItem(
-                      //   value: 'Group Log',
-                      //   child: Text('Group Log'),
-                      // ),
-                    ],
                   ],
+                ];
+              },
             ),
           ],
         ),
@@ -782,16 +775,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Group name updated.')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error updating name: $e')));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating name: $e')));
     }
   }
 
   void _showViewGroupCodeDialog() async {
     final groupId = widget.groupId;
+
     if (groupId == null) return;
 
     try {

@@ -17,7 +17,24 @@ class MainScreen extends ConsumerStatefulWidget {
 }
 
 class _MainScreenState extends ConsumerState<MainScreen> {
-  AppBar _currentAppBar = AppBar(title: Text('Home')); // Default AppBar
+  AppBar _currentAppBar = AppBar(
+    title: const Text(
+      "CostMate",
+      style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
+    ),
+    backgroundColor: Colors.green,
+    centerTitle: true,
+    actions: [
+      PopupMenuButton<String>(
+        icon: const Icon(Icons.add),
+        itemBuilder: (BuildContext context) {
+          return ['Create Group', 'Join Group'].map((String choice) {
+            return PopupMenuItem<String>(value: choice, child: Text(choice));
+          }).toList();
+        },
+      ),
+    ],
+  ); // Default AppBar
   String name = '';
   String email = '';
   String? photoURL;

@@ -193,6 +193,15 @@ class ValidationService {
         await doc.reference.delete();
       }
 
+      final groupNotificationSnapshot =
+          await _firestore
+              .collection('groupnotifications')
+              .where('groupId', isEqualTo: groupId)
+              .get();
+      for (final doc in groupNotificationSnapshot.docs) {
+        await doc.reference.delete();
+      }
+
       await groupRef.delete();
       print("Group and all its related documents deleted.");
     } catch (e) {

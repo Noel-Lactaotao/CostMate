@@ -115,113 +115,120 @@ class _UserNotificationScreenState
         final allSelected = selectedIds.length == notifications.length;
 
         return Scaffold(
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+          body: Center(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 500, minWidth: 0),
+                width: MediaQuery.of(context).size.width * 1,
+                // padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: Icon(
+                          allSelected ? Icons.remove_done : Icons.done_all,
+                        ),
+                        label: Text(allSelected ? 'Unselect All' : 'Select All'),
+                        onPressed: () {
+                          setState(() {
+                            if (allSelected) {
+                              selectedIds.clear();
+                            } else {
+                              selectedIds = {
+                                for (var note in notifications)
+                                  note['id'] as String,
+                              };
+                            }
+                            updateAppBar();
+                          });
+                        },
                       ),
                     ),
-                    icon: Icon(
-                      allSelected ? Icons.remove_done : Icons.done_all,
-                    ),
-                    label: Text(allSelected ? 'Unselect All' : 'Select All'),
-                    onPressed: () {
-                      setState(() {
-                        if (allSelected) {
-                          selectedIds.clear();
-                        } else {
-                          selectedIds = {
-                            for (var note in notifications)
-                              note['id'] as String,
-                          };
-                        }
-                        updateAppBar();
-                      });
-                    },
                   ),
-                ),
-              ),
-              Divider(height: 10),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: notifications.length,
-                  itemBuilder: (context, index) {
-                    final note = notifications[index];
-                    final noteId = note['id'];
-                    final action = note['action'] ?? 'Unknown action';
-                    final groupName = note['groupName'] ?? 'Unknown group';
-                    final timestamp = note['createdAt'];
-
-                    DateTime createdAt;
-                    if (timestamp is Timestamp) {
-                      createdAt = timestamp.toDate();
-                    } else if (timestamp is DateTime) {
-                      createdAt = timestamp;
-                    } else {
-                      createdAt = DateTime.now();
-                    }
-
-                    final formattedDate = DateFormat.yMMMEd().add_jm().format(
-                      createdAt,
-                    );
-
-                    final isSelected = selectedIds.contains(noteId);
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      child: Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ListTile(
-                          leading: Checkbox(
-                            value: isSelected,
-                            onChanged: (checked) {
-                              setState(() {
-                                if (checked == true) {
-                                  selectedIds.add(noteId);
-                                } else {
-                                  selectedIds.remove(noteId);
-                                }
-                                updateAppBar();
-                              });
-                            },
+                  Divider(height: 10),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: notifications.length,
+                      itemBuilder: (context, index) {
+                        final note = notifications[index];
+                        final noteId = note['id'];
+                        final action = note['action'] ?? 'Unknown action';
+                        // final groupName = note['groupName'] ?? 'Unknown group';
+                        final timestamp = note['createdAt'];
+              
+                        DateTime createdAt;
+                        if (timestamp is Timestamp) {
+                          createdAt = timestamp.toDate();
+                        } else if (timestamp is DateTime) {
+                          createdAt = timestamp;
+                        } else {
+                          createdAt = DateTime.now();
+                        }
+              
+                        final formattedDate = DateFormat.yMMMEd().add_jm().format(
+                          createdAt,
+                        );
+              
+                        final isSelected = selectedIds.contains(noteId);
+              
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                          title: Text(
-                            '$action in "$groupName"',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                formattedDate,
-                                style: const TextStyle(color: Colors.grey),
+                          child: Card(
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: ListTile(
+                              leading: Checkbox(
+                                value: isSelected,
+                                onChanged: (checked) {
+                                  setState(() {
+                                    if (checked == true) {
+                                      selectedIds.add(noteId);
+                                    } else {
+                                      selectedIds.remove(noteId);
+                                    }
+                                    updateAppBar();
+                                  });
+                                },
                               ),
-                            ],
+                              title: Text(
+                                action,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    formattedDate,
+                                    style: const TextStyle(color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },

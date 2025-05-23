@@ -27,10 +27,6 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
   final currentUserId = FirebaseAuth.instance.currentUser?.uid;
   final userId = FirebaseAuth.instance.currentUser;
   Map<String, dynamic>? _selectedGroup;
-  final timestamp = FieldValue.serverTimestamp();
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
-  String? action;
 
   @override
   void initState() {
@@ -167,12 +163,10 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
 
     final firestore = FirebaseFirestore.instance;
     final currentUser = FirebaseAuth.instance.currentUser;
-    final userId = currentUser?.uid;
-    final groupId = group['id'];
-    final groupName = group['name'];
+    final String userId = currentUser!.uid;
+    final groupId = group['groupId'];
+    final groupName = group['groupName'];
     final timestamp = Timestamp.now();
-
-    if (userId == null || groupId == null) return;
 
     // Leave Group
     if (choice == 'Leave Group') {
@@ -212,41 +206,33 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
 
       final actionUser = 'The group "$groupName" has been deleted';
 
-      // Get all users in the group (assuming you have this subcollection or field)
-      final membersSnapshot =
+      final memberSnapshot =
           await firestore
-              .collection('groups')
-              .doc(groupId)
-              .collection('members')
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
               .get();
 
-      for (var doc in membersSnapshot.docs) {
-        final memberId = doc.id;
-        final notificationUserData = {
+      for (final doc in memberSnapshot.docs) {
+        final memberId = doc['userId'];
+
+        await firestore.collection('usernotifications').add({
           'userId': memberId,
           'groupId': groupId,
           'action': actionUser,
           'createdAt': timestamp,
-        };
-
-        await firestore
-            .collection('usernotifications')
-            .add(notificationUserData);
+        });
       }
     }
     // View Group Code (no notification needed)
     else if (choice == 'View Group Code') {
       await _showViewGroupCodeDialog();
-    } 
-    else if (choice == 'Invite Member') {
+    } else if (choice == 'Invite Member') {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder:
-              (context) => InviteScreen(
-                groupId: groupId,
-                currentUserId: userId,
-              ),
+              (context) =>
+                  InviteScreen(groupId: groupId, currentUserId: userId),
         ),
       );
     }
