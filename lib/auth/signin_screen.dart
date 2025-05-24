@@ -90,123 +90,125 @@ class _SignInScreenState extends State<SignInScreen> {
             constraints: const BoxConstraints(maxWidth: 500, minWidth: 0),
             width: MediaQuery.of(context).size.width * 0.9,
             // padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center, // Center vertically
-              mainAxisSize: MainAxisSize.min, // Adjusts size to fit children
-              children: [
-                const Text(
-                  "Sign In",
-                  style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 50),
-                TextFormField(
-                  controller: emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center, // Center vertically
+                mainAxisSize: MainAxisSize.min, // Adjusts size to fit children
+                children: [
+                  const Text(
+                    "Sign In",
+                    style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
                   ),
-                  validator:
-                      (value) => value!.isEmpty ? 'Enter valid email' : null,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  obscureText: true,
-                  validator:
-                      (value) => value!.isEmpty ? 'Enter password' : null,
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity, // Matches TextFormField width
-                  child: ElevatedButton(
-                    onPressed: _signIn,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 85, 131, 0),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 0,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  const SizedBox(height: 50),
+                  TextFormField(
+                    controller: emailController,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      'Sign In',
-                      style: TextStyle(fontSize: 20, color: Colors.white),
-                    ),
+                    validator:
+                        (value) => value!.isEmpty ? 'Enter valid email' : null,
                   ),
-                ),
-                const SizedBox(height: 40),
-                Row(
-                  children: const [
-                    Expanded(child: Divider(thickness: 1)),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Text(
-                        "Sign In Option",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    obscureText: true,
+                    validator:
+                        (value) => value!.isEmpty ? 'Enter password' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity, // Matches TextFormField width
+                    child: ElevatedButton(
+                      onPressed: _signIn,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color.fromARGB(255, 85, 131, 0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 0,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                    ),
-                    Expanded(child: Divider(thickness: 1)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _signInWithGoogle,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 0,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                      child: const Text(
+                        'Sign In',
+                        style: TextStyle(fontSize: 20, color: Colors.white),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          'assets/images/google.jpg', // Make sure this path is correct
-                          width: 24,
-                          height: 24,
-                        ),
-                        const SizedBox(
-                          width: 10,
-                        ), // Spacing between image and text
-                        const Text(
-                          'Google',
+                  ),
+                  const SizedBox(height: 40),
+                  Row(
+                    children: const [
+                      Expanded(child: Divider(thickness: 1)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          "Sign In Option",
                           style: TextStyle(
-                            fontSize: 20,
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ],
+                      ),
+                      Expanded(child: Divider(thickness: 1)),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _signInWithGoogle,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 0,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/images/google.jpg', // Make sure this path is correct
+                            width: 24,
+                            height: 24,
+                          ),
+                          const SizedBox(
+                            width: 10,
+                          ), // Spacing between image and text
+                          const Text(
+                            'Google',
+                            style: TextStyle(
+                              fontSize: 20,
+                              color: Colors.black,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed:
-                      () => Navigator.pushReplacementNamed(context, '/signup'),
-                  child: const Text("Don't have an account? Sign Up"),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  TextButton(
+                    onPressed:
+                        () => Navigator.pushReplacementNamed(context, '/signup'),
+                    child: const Text("Don't have an account? Sign Up"),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

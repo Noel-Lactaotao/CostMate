@@ -105,10 +105,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   void _logout() async {
     await _auth.signOut();
+
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const SignInScreen()),
+        (route) => false, // This clears all previous routes
       );
     }
   }
