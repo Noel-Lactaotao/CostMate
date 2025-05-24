@@ -21,6 +21,20 @@ class _GroupNotificationScreenState
   List<Map<String, dynamic>> notifications = [];
   List<Map<String, dynamic>> _notificationsToMarkSeen = [];
   bool hasMarkedSeen = false;
+  String? userRole;
+
+  @override
+  void initState() {
+    super.initState();
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null) {
+      getUserRole(widget.groupId, userId).then((role) {
+        setState(() {
+          userRole = role;
+        });
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -29,6 +43,26 @@ class _GroupNotificationScreenState
       _markNotificationsAsSeen(_notificationsToMarkSeen, userId);
     }
     super.dispose();
+  }
+
+  Future<String> getUserRole(String groupId, String userId) async {
+    try {
+      final querySnapshot =
+          await FirebaseFirestore.instance
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .where('userId', isEqualTo: userId)
+              .limit(1)
+              .get();
+
+      if (querySnapshot.docs.isEmpty) return 'none';
+
+      final data = querySnapshot.docs.first.data();
+      return data['role'] ?? 'none';
+    } catch (e) {
+      debugPrint('Error getting user role: $e');
+      return 'none';
+    }
   }
 
   Future<void> _markNotificationsAsSeen(
@@ -238,6 +272,9 @@ class _GroupNotificationScreenState
   }
 
   AppBar _buildAppBar({bool showDelete = false, VoidCallback? onDelete}) {
+    final canDelete =
+        (userRole == 'admin' || userRole == 'co-admin') && showDelete;
+
     return AppBar(
       title: const Text(
         "Group Notification",
@@ -246,7 +283,7 @@ class _GroupNotificationScreenState
       backgroundColor: Colors.green,
       centerTitle: true,
       actions: [
-        if (showDelete)
+        if (canDelete)
           IconButton(icon: const Icon(Icons.delete), onPressed: onDelete),
       ],
     );

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
+import 'package:costmate/validation/validation_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,11 @@ class TodoScreen extends ConsumerStatefulWidget {
 
 class _TodoScreenState extends ConsumerState<TodoScreen> {
   final user = FirebaseAuth.instance.currentUser;
+  final expenseTitleController = TextEditingController();
+  final expenseDescriptionController = TextEditingController();
+  final expenseAmountController = TextEditingController();
+
+  String? selectedPaidBy;
 
   @override
   void initState() {
@@ -312,6 +318,40 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     );
   }
 
+  void showDoneDialog({
+    required BuildContext context,
+    required Future<void> Function() onMarkTodoDone,
+    required Future<void> Function() onAddExpense,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Is it an Expense?'),
+            content: const Text('Would you like to add this as an expense?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false), // No
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true), // Yes
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+    );
+
+    if (result == null) return; // dialog dismissed
+
+    if (result == false) {
+      await onMarkTodoDone();
+      Navigator.pop(context); // close screen if needed
+    } else {
+      await onAddExpense();
+    }
+  }
+
   Future<String> getGroupName(String groupId) async {
     try {
       final doc =
@@ -322,6 +362,228 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
       return doc.data()?['groupName'] ?? 'Unknown group';
     } catch (e) {
       return 'Error fetching Group Name';
+    }
+  }
+
+  Future<void> _showAddExpense(String groupId) async {
+    List<String> memberList = [];
+    String? currentUserEmail = user?.email;
+
+    try {
+      // Query top-level 'groupmembers' collection where groupId == current groupId
+      final groupMembersSnapshot =
+          await FirebaseFirestore.instance
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .get();
+
+      for (var doc in groupMembersSnapshot.docs) {
+        final userId = doc['userId'] as String;
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .get();
+
+        if (userDoc.exists) {
+          final userData = userDoc.data();
+          if (userData != null && userData.containsKey('email')) {
+            memberList.add(userData['email']);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error fetching group members: $e');
+      }
+    }
+
+    if (currentUserEmail != null) {
+      memberList.remove(currentUserEmail);
+      memberList.insert(0, currentUserEmail);
+    }
+
+    String? selectedPaidBy = currentUserEmail;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text("Add Expense"),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.9,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(height: 10),
+                        TextFormField(
+                          controller: expenseTitleController,
+                          decoration: InputDecoration(
+                            labelText: 'Title',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: expenseAmountController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: 'Amount',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          value: selectedPaidBy,
+                          items:
+                              memberList
+                                  .map(
+                                    (email) => DropdownMenuItem(
+                                      value: email,
+                                      child: Text(
+                                        email,
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              selectedPaidBy = value;
+                            });
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Paid By',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: expenseDescriptionController,
+                          keyboardType: TextInputType.multiline,
+                          maxLines: null,
+                          decoration: const InputDecoration(
+                            labelText: 'Description (optional)',
+                            border: OutlineInputBorder(),
+                            alignLabelWithHint: true,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    expenseTitleController.clear();
+                    expenseDescriptionController.clear();
+                    expenseAmountController.clear();
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final title = expenseTitleController.text.trim();
+                    final amountText = expenseAmountController.text.trim();
+                    final description =
+                        expenseDescriptionController.text.trim();
+                    // Pass values explicitly to addExpense
+                    addExpense(
+                      groupId: groupId,
+                      title: title,
+                      amountText: amountText,
+                      description: description,
+                      paidByUser: selectedPaidBy,
+                    );
+                    // markTodoAsDone(todoId);
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Add"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void addExpense({
+    required String groupId,
+    required String title,
+    required String amountText,
+    required String description,
+    String? paidByUser,
+  }) async {
+    if (title.isEmpty || amountText.isEmpty || paidByUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill in all required fields.")),
+      );
+      return;
+    }
+
+    double? amount = double.tryParse(amountText);
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid amount.")),
+      );
+      return;
+    }
+
+    try {
+      final expenseId = await ValidationService().addExpense(
+        title: title,
+        groupId: groupId,
+        amount: amount.toString(),
+        paidBy: paidByUser,
+        description: description,
+      );
+
+      if (expenseId != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Expense Added Successfully")),
+        );
+
+        // Clear input fields after success
+        expenseTitleController.clear();
+        expenseDescriptionController.clear();
+        expenseAmountController.clear();
+
+        // No need to call _fetchExpenses(); Riverpod stream will auto-update
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Error Adding Expense")));
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding expense: $e');
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Unexpected error: $e")));
+    }
+  }
+
+  Future<void> markTodoAsDone(String todoId) async {
+    final todoRef = FirebaseFirestore.instance.collection('TODO').doc(todoId);
+
+    try {
+      await todoRef.update({
+        'status': 'Done',
+        'updatedAt': FieldValue.serverTimestamp(), // optional: update timestamp
+      });
+      print('TODO marked as Done.');
+    } catch (e) {
+      print('Error updating TODO: $e');
     }
   }
 
@@ -340,6 +602,7 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
           return const Scaffold(body: Center(child: Text('Todo not found')));
         }
 
+        final todoId = todo['todoId'];
         final String title = todo['todoTitle'] ?? 'No title';
         final String groupId = todo['groupId'] ?? '';
         final String description = todo['description'] ?? 'No description';
@@ -471,26 +734,39 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
                               'Created At',
                               relativeTime,
                             ),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  Navigator.pop(context);
-                                },
-                                icon: const Icon(Icons.check),
-                                label: const Text('Done'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  textStyle: const TextStyle(fontSize: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                            if (status == 'Pending')
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    showDoneDialog(
+                                      context: context,
+                                      onMarkTodoDone:
+                                          () => markTodoAsDone(
+                                            todoId,
+                                          ), // Pass the function reference, no parentheses
+                                      onAddExpense: () async {
+                                        await _showAddExpense(
+                                          groupId,
+                                        ); // wait for the dialog to finish
+                                        await markTodoAsDone(todoId);
+                                      }, // Pass the function reference
+                                    );
+                                  },
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Done'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    textStyle: const TextStyle(fontSize: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                       ),
