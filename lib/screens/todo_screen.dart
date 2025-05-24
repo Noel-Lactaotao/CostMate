@@ -68,6 +68,8 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'edited a TODO: ${todoData['todoTitle']}',
           'userId': user.uid,
+          'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -82,6 +84,8 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'deleted a TODO: ${todoData['todoTitle']}',
           'userId': user.uid,
+          'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -474,13 +478,16 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
                                   Navigator.pop(context);
                                 },
                                 icon: const Icon(Icons.check),
-                                label: const Text('Approve'),
+                                label: const Text('Done'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.green,
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
                                   ),
                                   textStyle: const TextStyle(fontSize: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                               ),
                             ),

@@ -91,6 +91,9 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   }
 
   void updateAppBar() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
     widget.onUpdateAppBar(
       AppBar(
         title: Text(
@@ -100,21 +103,68 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         backgroundColor: Colors.green,
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: Icon(Icons.notifications),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) => GroupNotificationScreen(
-                        groupId: groupId, // <-- pass actual group ID here
+          // ✅ StreamBuilder for notifications
+          StreamBuilder<QuerySnapshot>(
+            stream:
+                FirebaseFirestore.instance
+                    .collection('groupnotifications')
+                    .where('groupId', isEqualTo: groupId)
+                    .snapshots(),
+            builder: (context, snapshot) {
+              final docs = snapshot.data?.docs ?? [];
+              final unseenCount =
+                  docs.where((doc) {
+                    final seenBy = List<String>.from(doc['seenBy'] ?? []);
+                    return !seenBy.contains(userId);
+                  }).length;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  GroupNotificationScreen(groupId: groupId),
+                        ),
+                      );
+                    },
+                  ),
+                  if (unseenCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          unseenCount > 99 ? '99+' : '$unseenCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                ),
+                    ),
+                ],
               );
             },
           ),
 
+          // ⚙️ PopupMenuButton
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (choice) => _onMenuSelected(choice, groupId),
@@ -185,6 +235,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           'groupId': groupId,
           'type': 'message',
           'action': 'added an expense to the group',
+          'seenBy': [],
           'createdAt': timestamp,
         });
         break;
@@ -197,6 +248,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           'groupId': groupId,
           'type': 'message',
           'action': 'added a TODO item to the group',
+          'seenBy': [],
           'createdAt': timestamp,
         });
         break;
@@ -209,6 +261,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           'groupId': groupId,
           'type': 'message',
           'action': 'left the group',
+          'seenBy': [],
           'createdAt': timestamp,
         });
         break;
@@ -221,6 +274,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           'groupId': groupId,
           'type': 'message',
           'action': 'edited the group name',
+          'seenBy': [],
           'createdAt': Timestamp.now(),
         });
         break;
@@ -242,6 +296,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             'groupId': groupId,
             'type': 'message',
             'action': 'The group "$groupName" has been deleted',
+            'isSeen': false,
             'createdAt': timestamp,
           });
         }
@@ -252,9 +307,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder:
-                (context) =>
-                    InviteScreen(groupId: this.groupId),
+            builder: (context) => InviteScreen(groupId: this.groupId),
           ),
         );
         break;

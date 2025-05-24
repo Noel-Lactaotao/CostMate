@@ -151,6 +151,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                     'groupId': groupId,
                     'type': 'message',
                     'action': 'joined the group',
+                    'seenBy': [],
                     'createdAt': timestamp,
                   };
 
@@ -194,6 +195,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
         'groupId': groupId,
         'type': 'message',
         'action': 'left the group',
+        'seenBy': [],
         'createdAt': timestamp,
       };
 
@@ -210,6 +212,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
         'groupId': groupId,
         'type': 'message',
         'action': 'edited the group',
+        'seenBy': [],
         'createdAt': timestamp,
       };
 
@@ -235,6 +238,7 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
           'groupId': groupId,
           'type': 'message',
           'action': 'The group "$groupName" has been deleted',
+          'isSeen': false,
           'createdAt': timestamp,
         });
       }

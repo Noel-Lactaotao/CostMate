@@ -18,6 +18,41 @@ class GroupNotificationScreen extends ConsumerStatefulWidget {
 class _GroupNotificationScreenState
     extends ConsumerState<GroupNotificationScreen> {
   Set<String> selectedIds = {};
+  List<Map<String, dynamic>> notifications = [];
+  List<Map<String, dynamic>> _notificationsToMarkSeen = [];
+  bool hasMarkedSeen = false;
+
+  @override
+  void dispose() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null && _notificationsToMarkSeen.isNotEmpty) {
+      _markNotificationsAsSeen(_notificationsToMarkSeen, userId);
+    }
+    super.dispose();
+  }
+
+  Future<void> _markNotificationsAsSeen(
+    List<Map<String, dynamic>> notifications,
+    String userId,
+  ) async {
+    final batch = FirebaseFirestore.instance.batch();
+
+    for (final note in notifications) {
+      final docId = note['id'];
+      final seenBy = List<String>.from(note['seenBy'] ?? []);
+
+      if (!seenBy.contains(userId)) {
+        final docRef = FirebaseFirestore.instance
+            .collection('groupnotifications')
+            .doc(docId);
+        batch.update(docRef, {
+          'seenBy': FieldValue.arrayUnion([userId]),
+        });
+      }
+    }
+
+    await batch.commit();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +76,11 @@ class _GroupNotificationScreenState
                 (b['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
             return bTime.compareTo(aTime); // Newest first
           });
+
+        if (!hasMarkedSeen) {
+          _notificationsToMarkSeen = notifications;
+          hasMarkedSeen = true;
+        }
 
         if (notifications.isEmpty) {
           return Scaffold(
@@ -111,6 +151,8 @@ class _GroupNotificationScreenState
                         final action = note['action'] ?? 'Unknown action';
                         final name = note['name'] ?? 'Unknown user';
                         final timestamp = note['createdAt'];
+                        final seenBy = List<String>.from(note['seenBy'] ?? []);
+                        final isSeen = seenBy.contains(userId);
 
                         DateTime createdAt;
                         if (timestamp is Timestamp) {
@@ -131,35 +173,52 @@ class _GroupNotificationScreenState
                             horizontal: 12,
                             vertical: 6,
                           ),
-                          child: Card(
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              leading: Checkbox(
-                                value: isSelected,
-                                onChanged: (checked) {
-                                  setState(() {
-                                    if (checked == true) {
-                                      selectedIds.add(noteId);
-                                    } else {
-                                      selectedIds.remove(noteId);
-                                    }
-                                  });
-                                },
-                              ),
-                              title: Text(
-                                '$name - "$action"',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                          child: Stack(
+                            children: [
+                              Card(
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ListTile(
+                                  leading: Checkbox(
+                                    value: isSelected,
+                                    onChanged: (checked) {
+                                      setState(() {
+                                        if (checked == true) {
+                                          selectedIds.add(noteId);
+                                        } else {
+                                          selectedIds.remove(noteId);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  title: Text(
+                                    '$name - "$action"',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    formattedDate,
+                                    style: const TextStyle(color: Colors.grey),
+                                  ),
                                 ),
                               ),
-                              subtitle: Text(
-                                formattedDate,
-                                style: const TextStyle(color: Colors.grey),
-                              ),
-                            ),
+                              if (!isSeen)
+                                Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },

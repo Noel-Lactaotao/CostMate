@@ -67,7 +67,17 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
     }
   }
 
-  Future<void> approveExpense(String expenseId) async {
+  Future<void> approveExpense(
+    String expenseId,
+    Map<String, dynamic> expenseData,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final groupId = expenseData['groupId'];
+
+    if (user == null || groupId == null) return;
+
+    final expenseTitle = expenseData['expenseTitle'] ?? 'Untitled';
+
     try {
       await FirebaseFirestore.instance
           .collection('expenses')
@@ -76,6 +86,15 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
     } catch (e) {
       debugPrint('Error approving expense: $e');
     }
+
+    await FirebaseFirestore.instance.collection('groupnotifications').add({
+      'action': 'approved the expense: $expenseTitle',
+      'userId': user.uid,
+      'type': 'message',
+      'seenBy': [],
+      'groupId': groupId,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   void _onMenuSelected(
@@ -83,7 +102,6 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
     Map<String, dynamic> expenseData,
     String expenseId,
   ) async {
-
     final user = FirebaseAuth.instance.currentUser;
     final groupId = expenseData['groupId'];
 
@@ -105,6 +123,8 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'edited the expense: $expenseTitle',
           'userId': user.uid,
+          'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -119,6 +139,8 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         await FirebaseFirestore.instance.collection('groupnotifications').add({
           'action': 'deleted the expense: $expenseTitle',
           'userId': user.uid,
+          'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -434,7 +456,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                     backgroundColor: Colors.green,
                     centerTitle: true,
                     actions: [
-                      if (isAdminOrCoAdmin || isOwner && status =='pending')
+                      if (isAdminOrCoAdmin || isOwner && status == 'pending')
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.more_vert),
                           onSelected:
@@ -550,7 +572,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
                                   onPressed: () async {
-                                    await approveExpense(expenseId);
+                                    await approveExpense(expenseId, expense);
                                     Navigator.pop(context);
                                   },
                                   icon: const Icon(Icons.check),
@@ -561,6 +583,9 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                                       vertical: 14,
                                     ),
                                     textStyle: const TextStyle(fontSize: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                   ),
                                 ),
                               ),

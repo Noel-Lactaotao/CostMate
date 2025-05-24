@@ -88,6 +88,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
           'action': 'edited a TODO: ${todoData['todoTitle']}',
           'userId': user.uid,
           'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -104,6 +105,7 @@ class _TodoTabState extends ConsumerState<TodoTab> {
           'action': 'deleted a TODO: ${todoData['todoTitle']}',
           'userId': user.uid,
           'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });

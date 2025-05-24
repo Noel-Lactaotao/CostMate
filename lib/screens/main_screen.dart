@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/auth/auth_service.dart';
 import 'package:costmate/auth/signin_screen.dart';
 import 'package:costmate/providers/user_and_group_providers.dart';
@@ -6,6 +7,7 @@ import 'package:costmate/screens/invitation_screen.dart';
 import 'package:costmate/screens/myhome_screen.dart';
 import 'package:costmate/screens/usernotification_screen.dart';
 import 'package:costmate/screens/settings_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,6 +47,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   String? selectedGroupId;
   String? selectedGroupName;
   bool? isSelectedAdmin;
+  int _unseenInvitationCount = 0;
+  int _unseenUserNotificationCount = 0;
 
   List<Map<String, dynamic>> createdGroups =
       []; // Make this dynamic to include isAdmin
@@ -59,6 +63,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   @override
   void initState() {
     super.initState();
+    _listenToInvitationCount();
+    _listenToUserNotificationCount();
 
     _screens = [
       MyHomeScreen(onUpdateAppBar: _updateAppBar, onGroupTap: _onGroupTap),
@@ -130,6 +136,38 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         );
       },
     );
+  }
+
+  void _listenToInvitationCount() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    FirebaseFirestore.instance
+        .collection('groupInvitations')
+        .where('invitedUserId', isEqualTo: userId)
+        .where('isSeen', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+          setState(() {
+            _unseenInvitationCount = snapshot.docs.length;
+          });
+        });
+  }
+
+  void _listenToUserNotificationCount() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    FirebaseFirestore.instance
+        .collection('usernotifications')
+        .where('userId', isEqualTo: userId)
+        .where('isSeen', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+          setState(() {
+            _unseenUserNotificationCount = snapshot.docs.length;
+          });
+        });
   }
 
   @override
@@ -324,7 +362,37 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                       if (hasJoinedGroups && _isJoinedExpanded)
                         const Divider(height: 5),
                       ListTile(
-                        leading: const Icon(Icons.email),
+                        leading: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(Icons.email),
+                            if (_unseenInvitationCount > 0)
+                              Positioned(
+                                right: -6,
+                                top: -6,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 20,
+                                    minHeight: 20,
+                                  ),
+                                  child: Text(
+                                    '$_unseenInvitationCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                         title: const Text('Invitation'),
                         selected: _selectedDrawerItem == 'Invitation',
                         selectedTileColor: Colors.green.shade100,
@@ -339,7 +407,37 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                       ),
 
                       ListTile(
-                        leading: const Icon(Icons.notifications),
+                        leading: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            const Icon(Icons.notifications),
+                            if (_unseenUserNotificationCount > 0)
+                              Positioned(
+                                right: -6,
+                                top: -6,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 20,
+                                    minHeight: 20,
+                                  ),
+                                  child: Text(
+                                    '$_unseenUserNotificationCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                         title: const Text('Notification'),
                         selected: _selectedDrawerItem == 'Notification',
                         selectedTileColor: Colors.green.shade100,
@@ -352,7 +450,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                           Navigator.pop(context);
                         },
                       ),
-
 
                       ListTile(
                         leading: const Icon(Icons.settings),

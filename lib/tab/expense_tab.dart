@@ -329,6 +329,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
           'action': 'edited the expense: $expenseTitle',
           'userId': user.uid,
           'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -342,6 +343,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
           'action': 'deleted the expense: $expenseTitle',
           'userId': user.uid,
           'type': 'message',
+          'seenBy': [],
           'groupId': groupId,
           'createdAt': FieldValue.serverTimestamp(),
         });

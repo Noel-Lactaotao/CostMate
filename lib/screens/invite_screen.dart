@@ -47,6 +47,7 @@ class _InviteScreenState extends State<InviteScreen> {
       'groupId': widget.groupId,
       'invitedUserId': invitedUserId,
       'inviterUserId': userId,
+      'isSeen': false,
       'status': 'pending',
       'timestamp': FieldValue.serverTimestamp(),
     });

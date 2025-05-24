@@ -104,12 +104,13 @@ class _InvitationScreenState extends ConsumerState<InvitationScreen> {
           .delete();
 
       await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'userId': userId,
-          'groupId': groupId,
-          'type': 'message',
-          'action': 'joined the group',
-          'createdAt': Timestamp.now(),
-        });
+        'userId': userId,
+        'groupId': groupId,
+        'type': 'message',
+        'seenBy': [],
+        'action': 'joined the group',
+        'createdAt': Timestamp.now(),
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You have joined the group.')),
@@ -138,6 +139,26 @@ class _InvitationScreenState extends ConsumerState<InvitationScreen> {
     }
   }
 
+  Future<void> _markInvitationsAsSeen() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+
+    final querySnapshot =
+        await FirebaseFirestore.instance
+            .collection('groupInvitations')
+            .where('invitedUserId', isEqualTo: userId)
+            .where('isSeen', isEqualTo: false)
+            .get();
+
+    for (final doc in querySnapshot.docs) {
+      batch.update(doc.reference, {'isSeen': true});
+    }
+
+    await batch.commit();
+  }
+
   @override
   Widget build(BuildContext context) {
     final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -158,6 +179,12 @@ class _InvitationScreenState extends ConsumerState<InvitationScreen> {
 
           final invitations = snapshot.data ?? [];
 
+          if (invitations.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _markInvitationsAsSeen(); // Mark unseen invites
+            });
+          }
+
           if (invitations.isEmpty) {
             return const Center(child: Text('No invitations at the moment.'));
           }
@@ -174,7 +201,10 @@ class _InvitationScreenState extends ConsumerState<InvitationScreen> {
                 padding: const EdgeInsets.all(8.0),
                 child: Center(
                   child: Container(
-                    constraints: const BoxConstraints(maxWidth: 500, minWidth: 0),
+                    constraints: const BoxConstraints(
+                      maxWidth: 500,
+                      minWidth: 0,
+                    ),
                     width: MediaQuery.of(context).size.width * 1,
                     child: Card(
                       margin: const EdgeInsets.symmetric(
@@ -207,7 +237,8 @@ class _InvitationScreenState extends ConsumerState<InvitationScreen> {
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 ElevatedButton(
-                                  onPressed: () => _handleDeny(invite['inviteId']),
+                                  onPressed:
+                                      () => _handleDeny(invite['inviteId']),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.red,
                                     foregroundColor: Colors.white,

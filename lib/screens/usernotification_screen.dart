@@ -23,6 +23,9 @@ class UserNotificationScreen extends ConsumerStatefulWidget {
 class _UserNotificationScreenState
     extends ConsumerState<UserNotificationScreen> {
   Set<String> selectedIds = {};
+  List<Map<String, dynamic>> notifications = [];
+  List<Map<String, dynamic>> _notificationsToMarkSeen = [];
+  bool hasMarkedSeen = false;
 
   @override
   void initState() {
@@ -30,6 +33,36 @@ class _UserNotificationScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       updateAppBar(); // 📌 Initial app bar setup
     });
+  }
+
+  @override
+  void dispose() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null && _notificationsToMarkSeen.isNotEmpty) {
+      _markNotificationsAsSeen(_notificationsToMarkSeen, userId);
+    }
+    super.dispose();
+  }
+
+  Future<void> _markNotificationsAsSeen(
+    List<Map<String, dynamic>> notifications,
+    String userId,
+  ) async {
+    final batch = FirebaseFirestore.instance.batch();
+
+    for (final note in notifications) {
+      final docId = note['id'];
+      final isSeen = note['isSeen'] ?? false;
+
+      if (isSeen == false) {
+        final docRef = FirebaseFirestore.instance
+            .collection('usernotifications')
+            .doc(docId);
+        batch.update(docRef, {'isSeen': true});
+      }
+    }
+
+    await batch.commit();
   }
 
   void updateAppBar() {
@@ -108,6 +141,11 @@ class _UserNotificationScreenState
             return bTime.compareTo(aTime); // Newest first
           });
 
+        if (!hasMarkedSeen) {
+          _notificationsToMarkSeen = notifications;
+          hasMarkedSeen = true;
+        }
+
         if (notifications.isEmpty) {
           return const Center(child: Text("You don't have any notification."));
         }
@@ -118,8 +156,8 @@ class _UserNotificationScreenState
           body: Center(
             child: Container(
               constraints: const BoxConstraints(maxWidth: 500, minWidth: 0),
-                width: MediaQuery.of(context).size.width * 1,
-                // padding: const EdgeInsets.all(12),
+              width: MediaQuery.of(context).size.width * 1,
+              // padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
                   Padding(
@@ -140,7 +178,9 @@ class _UserNotificationScreenState
                         icon: Icon(
                           allSelected ? Icons.remove_done : Icons.done_all,
                         ),
-                        label: Text(allSelected ? 'Unselect All' : 'Select All'),
+                        label: Text(
+                          allSelected ? 'Unselect All' : 'Select All',
+                        ),
                         onPressed: () {
                           setState(() {
                             if (allSelected) {
@@ -167,7 +207,8 @@ class _UserNotificationScreenState
                         final action = note['action'] ?? 'Unknown action';
                         // final groupName = note['groupName'] ?? 'Unknown group';
                         final timestamp = note['createdAt'];
-              
+                        final isSeen = note['isSeen'] ?? false;
+
                         DateTime createdAt;
                         if (timestamp is Timestamp) {
                           createdAt = timestamp.toDate();
@@ -176,51 +217,73 @@ class _UserNotificationScreenState
                         } else {
                           createdAt = DateTime.now();
                         }
-              
-                        final formattedDate = DateFormat.yMMMEd().add_jm().format(
-                          createdAt,
-                        );
-              
+
+                        final formattedDate = DateFormat.yMMMEd()
+                            .add_jm()
+                            .format(createdAt);
+
                         final isSelected = selectedIds.contains(noteId);
-              
+
                         return Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 6,
                           ),
-                          child: Card(
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              leading: Checkbox(
-                                value: isSelected,
-                                onChanged: (checked) {
-                                  setState(() {
-                                    if (checked == true) {
-                                      selectedIds.add(noteId);
-                                    } else {
-                                      selectedIds.remove(noteId);
-                                    }
-                                    updateAppBar();
-                                  });
-                                },
-                              ),
-                              title: Text(
-                                action,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    formattedDate,
-                                    style: const TextStyle(color: Colors.grey),
+                          child: Stack(
+                            children: [
+                              Card(
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ListTile(
+                                  leading: Checkbox(
+                                    value: isSelected,
+                                    onChanged: (checked) {
+                                      setState(() {
+                                        if (checked == true) {
+                                          selectedIds.add(noteId);
+                                        } else {
+                                          selectedIds.remove(noteId);
+                                        }
+                                        updateAppBar();
+                                      });
+                                    },
                                   ),
-                                ],
+                                  title: Text(
+                                    action,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        formattedDate,
+                                        style: const TextStyle(
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (!isSeen)
+                                Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },

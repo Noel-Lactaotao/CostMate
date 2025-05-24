@@ -82,7 +82,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
         case 'Remove':
           await docRef.delete();
           actionUser = 'You have been Removed from $groupName';
-          actionGroup = 'Removed';
+          actionGroup = 'Removed from the group';
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('User removed from group.')),
           );
@@ -95,6 +95,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
           'groupId': groupId,
           'type': 'message',
           'action': actionUser,
+          'isSeen': false,
           'createdAt': timestamp,
         };
         // Add to usernotifications
@@ -109,6 +110,7 @@ class _MemberTabState extends ConsumerState<MemberTab> {
           'groupId': groupId,
           'type': 'message',
           'action': actionGroup,
+          'seenBy': [],
           'createdAt': timestamp,
         };
         // Add to groupnotifications
