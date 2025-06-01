@@ -64,7 +64,6 @@ class AuthService {
     required String name,
   }) async {
     try {
-      // First, register the user (this will handle adding data to Firestore)
       User? user = await registerUser(
         name: name,
         email: email,
@@ -72,14 +71,15 @@ class AuthService {
       );
 
       if (user != null) {
-        // Send email verification after the user is successfully created
         await user.sendEmailVerification();
-        return null; // Return null indicating success
+        return null;
       } else {
-        return 'User creation failed';
+        return 'User creation failed (null user)';
       }
+    } on FirebaseAuthException catch (e) {
+      return e.message; // clear Firebase error like "Email already in use"
     } catch (e) {
-      return e.toString(); // Handle any errors that occur
+      return 'Unknown error: ${e.toString()}';
     }
   }
 
@@ -108,7 +108,8 @@ class AuthService {
         final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
         if (googleUser == null) return "Google Sign-In cancelled";
 
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
         final credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
@@ -120,7 +121,8 @@ class AuthService {
       // 🔐 User info setup
       User? user = userCredential.user;
       if (user != null) {
-        DocumentSnapshot userDoc = await _firestore.collection("users").doc(user.uid).get();
+        DocumentSnapshot userDoc =
+            await _firestore.collection("users").doc(user.uid).get();
 
         if (!userDoc.exists) {
           await _firestore.collection("users").doc(user.uid).set({
