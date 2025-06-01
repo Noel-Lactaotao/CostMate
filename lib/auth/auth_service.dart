@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
@@ -48,15 +49,6 @@ class AuthService {
     return false;
   }
 
-  /// 🔹 Send email verification
-  Future<void> sendEmailVerification(User user) async {
-    try {
-      await user.sendEmailVerification();
-    } catch (e) {
-      print('Error sending verification email: $e');
-    }
-  }
-
   // 🔹 Email & Password Sign-Up
   Future<String?> signUp({
     required String email,
@@ -83,10 +75,23 @@ class AuthService {
     }
   }
 
+  // 🔹 Send email verification
+  Future<void> sendEmailVerification(User user) async {
+    try {
+      await user.sendEmailVerification();
+    } catch (e) {
+      print('Error sending verification email: $e');
+    }
+  }
+
   // 🔹 Email & Password Sign-In
   Future<String?> signIn(String email, String password) async {
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
+
+      // 🔹 Wait for auth state to update
+      await FirebaseAuth.instance.authStateChanges().first;
+
       return null;
     } catch (e) {
       return e.toString();
@@ -99,12 +104,10 @@ class AuthService {
       UserCredential userCredential;
 
       if (kIsWeb) {
-        // 🔹 Web sign-in with popup
         GoogleAuthProvider googleProvider = GoogleAuthProvider();
         userCredential = await _auth.signInWithPopup(googleProvider);
       } else {
-        // 🔹 Android/iOS
-        await GoogleSignIn().signOut(); // Optional: ensures a clean start
+        await GoogleSignIn().signOut(); // Optional clean-up
         final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
         if (googleUser == null) return "Google Sign-In cancelled";
 
@@ -118,12 +121,14 @@ class AuthService {
         userCredential = await _auth.signInWithCredential(credential);
       }
 
-      // 🔐 User info setup
+      // 🔹 Wait for auth state to update
+      await FirebaseAuth.instance.authStateChanges().first;
+
+      // Setup user info in Firestore
       User? user = userCredential.user;
       if (user != null) {
         DocumentSnapshot userDoc =
             await _firestore.collection("users").doc(user.uid).get();
-
         if (!userDoc.exists) {
           await _firestore.collection("users").doc(user.uid).set({
             "uid": user.uid,
@@ -133,10 +138,10 @@ class AuthService {
             "createdAt": FieldValue.serverTimestamp(),
           });
         }
-        return null; // ✅ Success
+        return null;
       }
     } catch (e) {
-      return e.toString(); // ⚠️ Return error message
+      return e.toString();
     }
 
     return "Google Sign-In failed.";
@@ -153,3 +158,12 @@ class AuthService {
     return _auth.currentUser;
   }
 }
+
+final authStateProvider = StreamProvider<User?>((ref) {
+  final auth = ref.watch(firebaseAuthProvider);
+  return auth.authStateChanges();
+});
+
+final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
+  return FirebaseAuth.instance;
+});

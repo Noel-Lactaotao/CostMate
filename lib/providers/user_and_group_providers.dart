@@ -1,5 +1,5 @@
+import 'package:costmate/auth/auth_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -29,7 +29,7 @@ class UserInfoState {
 
 /// Provider that listens for user info and group memberships
 final userInfoProvider = StreamProvider<UserInfoState>((ref) {
-  final user = FirebaseAuth.instance.currentUser;
+  final user = ref.watch(authStateProvider).value;
   final firestore = FirebaseFirestore.instance;
 
   if (user == null) {
@@ -37,13 +37,11 @@ final userInfoProvider = StreamProvider<UserInfoState>((ref) {
   }
 
   final userDocStream = firestore.collection("users").doc(user.uid).snapshots();
-
   final createdGroupsStream =
       firestore
           .collection('groups')
           .where('createdBy', isEqualTo: user.uid)
           .snapshots();
-
   final groupMembersStream =
       firestore
           .collection('groupmembers')
@@ -107,7 +105,7 @@ final userInfoProvider = StreamProvider<UserInfoState>((ref) {
 
 /// Provider that returns detailed group info (admin name, member count, etc.)
 final userGroupsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
-  final user = FirebaseAuth.instance.currentUser;
+  final user = ref.watch(authStateProvider).value;
   final firestore = FirebaseFirestore.instance;
 
   if (user == null) {
@@ -150,7 +148,6 @@ final userGroupsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
       return Stream.value(<Map<String, dynamic>>[]);
     }
 
-    // For each group, create a stream that combines the group doc and live member count
     final groupStreams = allGroupIds.map((groupId) {
       final groupDocStream =
           firestore.collection('groups').doc(groupId).snapshots();
@@ -166,10 +163,8 @@ final userGroupsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
         Map<String, dynamic>?
       >(groupDocStream, memberCountStream, (groupDoc, memberCount) {
         if (!groupDoc.exists) return null;
-
         final data = groupDoc.data()!;
         final isAdmin = data['createdBy'] == user.uid;
-
         final matchingDocs = joinedSnapshot.docs.where(
           (d) => d['groupId'] == groupId,
         );
@@ -193,7 +188,6 @@ final userGroupsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
     });
 
     return Rx.combineLatestList(groupStreams).map((groupList) {
-      // Filter out any nulls (in case a group doc was deleted)
       return groupList.whereType<Map<String, dynamic>>().toList();
     });
   });

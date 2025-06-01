@@ -74,40 +74,39 @@ class _InviteScreenState extends State<InviteScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: ListTile(
-          title: Text(
-            email,
-            style: const TextStyle(fontSize: 13, color: Colors.black),
-          ),
-          trailing:
-              isInvited
-                  ? ElevatedButton(
-                    onPressed: () => _cancelInvite(userId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  )
-                  : ElevatedButton(
-                    onPressed: () => _sendInvite(userId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Invite',
-                      style: TextStyle(color: Colors.white),
-                    ),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        child: Row(
+          children: [
+            // Email text takes as much space as available
+            Expanded(
+              child: Text(
+                email,
+                style: const TextStyle(fontSize: 13, color: Colors.black),
+                overflow: TextOverflow.ellipsis, // show "..." if too long
+              ),
+            ),
+            const SizedBox(width: 12), // space between text and button
+            SizedBox(
+              height: 30,
+              child: ElevatedButton(
+                onPressed:
+                    () =>
+                        isInvited ? _cancelInvite(userId) : _sendInvite(userId),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isInvited ? Colors.red : Colors.green,
+                  minimumSize: const Size(60, 30),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
+                ),
+                child: Text(
+                  isInvited ? 'Cancel' : 'Invite',
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -117,23 +116,26 @@ class _InviteScreenState extends State<InviteScreen> {
     return StreamBuilder<List<String>>(
       stream: _pendingInvitedUserIdsStream(),
       builder: (context, invitedSnapshot) {
-        if (!invitedSnapshot.hasData)
+        if (!invitedSnapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final invitedUserIds = invitedSnapshot.data!;
 
         return StreamBuilder<Set<String>>(
           stream: _groupMemberIdsStream(),
           builder: (context, membersSnapshot) {
-            if (!membersSnapshot.hasData)
+            if (!membersSnapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
+            }
             final groupMemberIds = membersSnapshot.data!;
 
             return StreamBuilder<QuerySnapshot>(
               stream:
                   FirebaseFirestore.instance.collection('users').snapshots(),
               builder: (context, usersSnapshot) {
-                if (!usersSnapshot.hasData)
+                if (!usersSnapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 final allUsers =
                     usersSnapshot.data!.docs
