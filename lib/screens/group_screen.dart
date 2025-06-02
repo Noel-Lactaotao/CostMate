@@ -1,3 +1,4 @@
+import 'package:another_flushbar/flushbar.dart';
 import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/screens/groupnotification_screen.dart';
 import 'package:costmate/screens/invite_screen.dart';
@@ -6,7 +7,6 @@ import 'package:costmate/tab/expense_tab.dart';
 import 'package:costmate/tab/member_tab.dart';
 import 'package:costmate/tab/todo_tab.dart';
 import 'package:costmate/validation/validation_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
@@ -58,6 +58,42 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     getUserRole(groupId);
   }
 
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 3),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
+  }
+
   Future<void> getUserRole(String groupId) async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
@@ -86,7 +122,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       }
       updateAppBar(); // ← Now update after the role is set
     } catch (e) {
-      print('Error fetching user role: $e');
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -346,9 +383,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching group members: $e');
-      }
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
 
     if (currentUserEmail != null) {
@@ -629,11 +665,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           final _ = ref.refresh(userGroupsProvider);
         }
 
-        if (!context.mounted) return;
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('You left the group.')));
+        if (!mounted) return;
+        showSuccessFlushbar(context, "You Left the Group");
 
         // Navigate to MainScreen after leaving
         Navigator.pushReplacement(
@@ -641,14 +674,12 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           MaterialPageRoute(builder: (context) => const MainScreen()),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are not a member of this group.')),
-        );
+        if (!mounted) return;
+        showSuccessFlushbar(context, "You are not a member of the Group");
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error leaving group: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -692,9 +723,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         final _ = ref.refresh(userGroupsProvider);
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Group deleted successfully.')),
-      );
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Group deleted successfully.");
 
       // Navigate to MainScreen after deleting
       Navigator.pushReplacement(
@@ -702,9 +732,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error deleting group: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -826,14 +855,11 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           ],
         ),
       );
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Group name updated.')));
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Group name Updated successfully.");
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating name: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -870,10 +896,10 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                       icon: const Icon(Icons.copy),
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: groupCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Group code copied to clipboard'),
-                          ),
+                        if (!mounted) return;
+                        showSuccessFlushbar(
+                          context,
+                          "Group code copied to Clipboard.",
                         );
                       },
                     ),
@@ -888,14 +914,12 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               ),
         );
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Group not found.')));
+        if (!mounted) return;
+        showSuccessFlushbar(context, "Group not found.");
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error fetching group code: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -907,17 +931,13 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     String? paidByUser,
   }) async {
     if (title.isEmpty || amountText.isEmpty || paidByUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in all required fields.")),
-      );
+      showSuccessFlushbar(context, "Please fill in all requied fields.");
       return;
     }
 
     double? amount = double.tryParse(amountText);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid amount.")),
-      );
+      showSuccessFlushbar(context, "Please enter a valid amount.");
       return;
     }
 
@@ -931,9 +951,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       );
 
       if (expenseId != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Expense Added Successfully")),
-        );
+        if (!mounted) return;
+        showSuccessFlushbar(context, "Expense added successfully.");
 
         // Clear input fields after success
         expenseTitleController.clear();
@@ -942,17 +961,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
         // No need to call _fetchExpenses(); Riverpod stream will auto-update
       } else {
-        ScaffoldMessenger.of(
+        if (!mounted) return; // widget is no longer in the widget tree
+        showErrorDialog(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Error Adding Expense")));
+          "Something went wrong. Please try again later.",
+        );
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error adding expense: $e');
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Unexpected error: $e")));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -965,9 +982,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     final createdBy = user?.uid;
 
     if (title.isEmpty || createdBy == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in the title.")),
-      );
+      showSuccessFlushbar(context, "Please fill in the title.");
       return;
     }
 
@@ -981,21 +996,18 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       );
 
       if (todoId != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("TODO Added Successfully")),
-        );
+        if (!mounted) return;
+        showSuccessFlushbar(context, "TODO added successfully.");
       } else {
-        ScaffoldMessenger.of(
+        if (!mounted) return; // widget is no longer in the widget tree
+        showErrorDialog(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Error Adding TODO")));
+          "Something went wrong. Please try again later.",
+        );
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error adding TODO: $e');
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Unexpected error: $e")));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
