@@ -1,8 +1,8 @@
+import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:costmate/validation/validation_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -28,6 +28,42 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
   @override
   void initState() {
     super.initState();
+  }
+
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 2),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
   }
 
   Future<String> getUserRole(String groupId, String userId) async {
@@ -69,32 +105,13 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
           currentDueDate: todoData['dueDate'], // Firestore Timestamp
           currentDescription: todoData['description'] ?? '',
         );
-
-        // Send edit notification
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'edited a TODO: ${todoData['todoTitle']}',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
 
       case 'Delete Todo':
-        _showDeleteTodoDialog(
+        _showDeleteTODODialog(
           todoId: todoId,
           title: todoData['todoTitle'] ?? 'Untitled',
         );
-
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'deleted a TODO: ${todoData['todoTitle']}',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
     }
   }
@@ -115,6 +132,20 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     required DateTime? dueDate, // Nullable
     required String description,
   }) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    final todoSnapshot =
+        await FirebaseFirestore.instance
+            .collection('TODO')
+            .where('todoId', isEqualTo: todoId)
+            .get();
+
+    String todoTitle = 'None';
+    String groupId = 'None';
+    if (todoSnapshot.docs.isNotEmpty) {
+      todoTitle = todoSnapshot.docs.first['todoTitle'] ?? 'None';
+      groupId = todoSnapshot.docs.first['groupId'] ?? 'None';
+    }
     try {
       final docRef = FirebaseFirestore.instance.collection('TODO').doc(todoId);
 
@@ -132,13 +163,24 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
 
       await docRef.update(data);
 
-      if (kDebugMode) {
-        print('TODO updated successfully');
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      // Send edit notification
+      await FirebaseFirestore.instance.collection('groupnotifications').add({
+        'action': 'edited a TODO: $todoTitle',
+        'userId': user?.uid,
+        'type': 'message',
+        'seenBy': [],
+        'groupId': groupId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      showSuccessFlushbar(context, "TODO updated successfully.");
     } catch (e) {
-      if (kDebugMode) {
-        print('Error updating TODO: $e');
-      }
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -146,11 +188,6 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     await FirebaseFirestore.instance.collection('TODO').doc(id).update({
       'status': 'Completed',
     });
-  }
-
-  Future<void> deleteTodo(String id) async {
-    await FirebaseFirestore.instance.collection('TODO').doc(id).delete();
-    Navigator.pop(context);
   }
 
   void _showEditTodoDialog({
@@ -278,7 +315,6 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
                           dueDate: selectedDueDate, // Pass DateTime
                           description: description,
                         );
-                        Navigator.pop(context);
                       },
                       child: const Text('Save'),
                     ),
@@ -288,30 +324,68 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     );
   }
 
-  void _showDeleteTodoDialog({
+  Future<void> _showDeleteTODODialog({
     required String todoId,
     required String title,
   }) async {
     await showDialog(
       context: context,
+      barrierDismissible: false, // prevent accidental dismiss
       builder:
-          (context) => AlertDialog(
+          (dialogContext) => AlertDialog(
             title: Text('Delete "$title"?'),
             content: const Text('Are you sure you want to delete this TODO?'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Cancel'),
               ),
               TextButton(
                 onPressed: () async {
+                  final user = FirebaseAuth.instance.currentUser;
+                  final userId = user?.uid;
+
+                  final todoSnapshot =
+                      await FirebaseFirestore.instance
+                          .collection('TODO')
+                          .where('todoId', isEqualTo: todoId)
+                          .get();
+
+                  String todoTitle = 'None';
+                  String groupId = 'None';
+
+                  if (todoSnapshot.docs.isNotEmpty) {
+                    final doc = todoSnapshot.docs.first;
+                    todoTitle = doc['todoTitle'] ?? 'None';
+                    groupId = doc['groupId'] ?? 'None';
+                  }
+
                   await FirebaseFirestore.instance
                       .collection('TODO')
                       .doc(todoId)
                       .delete();
+
+                  // First pop the dialog
                   Navigator.pop(context);
+
+                  await FirebaseFirestore.instance
+                      .collection('groupnotifications')
+                      .add({
+                        'action': 'deleted a TODO: $todoTitle',
+                        'userId': userId,
+                        'type': 'message',
+                        'seenBy': [],
+                        'groupId': groupId,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+
+                  Navigator.pop(context, 'deleted');
+
                 },
-                child: Text('Delete', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           ),
@@ -342,7 +416,7 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
           ),
     );
 
-    if (result == null) return; // dialog dismissed
+    if (result == null) return;
 
     if (result == false) {
       await onMarkTodoDone();
@@ -393,9 +467,8 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching group members: $e');
-      }
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
 
     if (currentUserEmail != null) {
@@ -524,17 +597,15 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
     String? paidByUser,
   }) async {
     if (title.isEmpty || amountText.isEmpty || paidByUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in all required fields.")),
-      );
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Please fill in all required fields.");
       return;
     }
 
     double? amount = double.tryParse(amountText);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid amount.")),
-      );
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Please enter a valid amount.");
       return;
     }
 
@@ -548,9 +619,8 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
       );
 
       if (expenseId != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Expense Added Successfully")),
-        );
+        if (!mounted) return;
+        showSuccessFlushbar(context, "Expense added successfully.");
 
         // Clear input fields after success
         expenseTitleController.clear();
@@ -559,17 +629,15 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
 
         // No need to call _fetchExpenses(); Riverpod stream will auto-update
       } else {
-        ScaffoldMessenger.of(
+        if (!mounted) return; // widget is no longer in the widget tree
+        showErrorDialog(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Error Adding Expense")));
+          "Something went wrong. Please try again later.",
+        );
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error adding expense: $e');
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Unexpected error: $e")));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -581,9 +649,11 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
         'status': 'Done',
         'updatedAt': FieldValue.serverTimestamp(), // optional: update timestamp
       });
-      print('TODO marked as Done.');
+      if (!mounted) return;
+      showSuccessFlushbar(context, "TODO Marked as Done.");
     } catch (e) {
-      print('Error updating TODO: $e');
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 

@@ -1,3 +1,4 @@
+import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +16,42 @@ class MemberTab extends ConsumerStatefulWidget {
 
 class _MemberTabState extends ConsumerState<MemberTab> {
   final currentUserId = FirebaseAuth.instance.currentUser!.uid;
+
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 2),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
+  }
 
   void _onMemberMenuSelected(
     String choice,
@@ -46,9 +83,8 @@ class _MemberTabState extends ConsumerState<MemberTab> {
       final querySnapshot = await memberRef.get();
 
       if (querySnapshot.docs.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Member not found.')));
+        if (!mounted) return;
+        showSuccessFlushbar(context, "Member not found.");
         return;
       }
 
@@ -65,27 +101,24 @@ class _MemberTabState extends ConsumerState<MemberTab> {
           await docRef.update({'role': 'co-admin'});
           actionUser = 'You have been Promoted to Co-Admin in $groupName';
           actionGroup = 'Promoted to Co-Admin';
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User promoted to co-admin.')),
-          );
+          if (!mounted) return;
+          showSuccessFlushbar(context, "User promoted to Co-Admin.");
           break;
 
         case 'Demote':
           await docRef.update({'role': 'member'});
           actionUser = 'You have been Demoted to Member in $groupName';
           actionGroup = 'Demoted to Member';
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User demoted to member.')),
-          );
+          if (!mounted) return;
+          showSuccessFlushbar(context, "User demoted to Member.");
           break;
 
         case 'Remove':
           await docRef.delete();
           actionUser = 'You have been Removed from $groupName';
           actionGroup = 'Removed from the group';
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User removed from group.')),
-          );
+          if (!mounted) return;
+          showSuccessFlushbar(context, "User removed from the group.");
           break;
       }
 
@@ -119,9 +152,8 @@ class _MemberTabState extends ConsumerState<MemberTab> {
             .add(notificationGroupData);
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 

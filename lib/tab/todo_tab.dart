@@ -1,8 +1,8 @@
+import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:costmate/screens/todo_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +30,42 @@ class _TodoTabState extends ConsumerState<TodoTab> {
   void initState() {
     super.initState();
     _loadSavedFilters(ref);
+  }
+
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 2),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
   }
 
   void _loadSavedFilters(WidgetRef ref) async {
@@ -82,16 +118,6 @@ class _TodoTabState extends ConsumerState<TodoTab> {
           currentDueDate: todoData['dueDate'], // Firestore Timestamp
           currentDescription: todoData['description'] ?? '',
         );
-
-        // Send edit notification
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'edited a TODO: ${todoData['todoTitle']}',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
 
       case 'Delete TODO':
@@ -99,16 +125,6 @@ class _TodoTabState extends ConsumerState<TodoTab> {
           todoId: todoId,
           title: todoData['todoTitle'] ?? 'Untitled',
         );
-
-        // Send delete notification
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'deleted a TODO: ${todoData['todoTitle']}',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
     }
   }
@@ -248,8 +264,6 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                       dueDate: selectedDueDate, // Pass DateTime
                       description: description,
                     );
-
-                    Navigator.pop(context);
                   },
                   child: const Text("Save"),
                 ),
@@ -267,6 +281,21 @@ class _TodoTabState extends ConsumerState<TodoTab> {
     required DateTime? dueDate, // Nullable
     required String description,
   }) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    final todoSnapshot =
+        await FirebaseFirestore.instance
+            .collection('TODO')
+            .where('todoId', isEqualTo: todoId)
+            .get();
+
+    String todoTitle = 'None';
+    String groupId = 'None';
+    if (todoSnapshot.docs.isNotEmpty) {
+      todoTitle = todoSnapshot.docs.first['todoTitle'] ?? 'None';
+      groupId = todoSnapshot.docs.first['groupId'] ?? 'None';
+    }
+
     try {
       final docRef = FirebaseFirestore.instance.collection('TODO').doc(todoId);
 
@@ -284,13 +313,24 @@ class _TodoTabState extends ConsumerState<TodoTab> {
 
       await docRef.update(data);
 
-      if (kDebugMode) {
-        print('TODO updated successfully');
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      // Send edit notification
+      await FirebaseFirestore.instance.collection('groupnotifications').add({
+        'action': 'edited a TODO: $todoTitle',
+        'userId': user?.uid,
+        'type': 'message',
+        'seenBy': [],
+        'groupId': groupId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      showSuccessFlushbar(context, "TODO updated successfully.");
     } catch (e) {
-      if (kDebugMode) {
-        print('Error updating TODO: $e');
-      }
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -311,11 +351,39 @@ class _TodoTabState extends ConsumerState<TodoTab> {
               ),
               TextButton(
                 onPressed: () async {
+                  final user = FirebaseAuth.instance.currentUser;
+
+                  final todoSnapshot =
+                      await FirebaseFirestore.instance
+                          .collection('TODO')
+                          .where('todoId', isEqualTo: todoId)
+                          .get();
+
+                  String todoTitle = 'None';
+                  String groupId = 'None';
+                  if (todoSnapshot.docs.isNotEmpty) {
+                    todoTitle = todoSnapshot.docs.first['todoTitle'] ?? 'None';
+                    groupId = todoSnapshot.docs.first['groupId'] ?? 'None';
+                  }
+
+                  await FirebaseFirestore.instance
+                      .collection('groupnotifications')
+                      .add({
+                        'action': 'deleted a TODO: $todoTitle',
+                        'userId': user?.uid,
+                        'type': 'message',
+                        'seenBy': [],
+                        'groupId': groupId,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
                   await FirebaseFirestore.instance
                       .collection('TODO')
                       .doc(todoId)
                       .delete();
                   Navigator.pop(context);
+
+                  if (!mounted) return;
+                  showSuccessFlushbar(context, "TODO successfully deleted.");
                 },
                 child: Text('Delete', style: TextStyle(color: Colors.red)),
               ),
@@ -557,8 +625,8 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                                             ),
                                           ],
                                         ),
-                                        onTap: () {
-                                          Navigator.push(
+                                        onTap: () async {
+                                          final result = await Navigator.push(
                                             context,
                                             MaterialPageRoute(
                                               builder:
@@ -567,6 +635,21 @@ class _TodoTabState extends ConsumerState<TodoTab> {
                                                   ),
                                             ),
                                           );
+
+                                          if (!mounted) return;
+
+                                          if (result == 'deleted') {
+                                            // Show success message
+                                            showSuccessFlushbar(
+                                              context,
+                                              "TODO successfully deleted.",
+                                            );
+
+                                            // Optionally refresh your data here
+                                            setState(() {
+                                              // Trigger a UI update if needed
+                                            });
+                                          }
                                         },
                                       ),
                                     ),

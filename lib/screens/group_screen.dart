@@ -256,88 +256,25 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   }
 
   void _onMenuSelected(String choice, String groupId) async {
-    final firestore = FirebaseFirestore.instance;
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
-
-    final String userId = currentUser.uid;
-    final timestamp = Timestamp.now();
-
     switch (choice) {
       case 'Add Expense':
         _showAddExpense(groupId);
-
-        await firestore.collection('groupnotifications').add({
-          'userId': userId,
-          'groupId': groupId,
-          'type': 'message',
-          'action': 'added an expense to the group',
-          'seenBy': [],
-          'createdAt': timestamp,
-        });
         break;
 
       case 'Add TODO':
         _showAddTODOList();
-
-        await firestore.collection('groupnotifications').add({
-          'userId': userId,
-          'groupId': groupId,
-          'type': 'message',
-          'action': 'added a TODO item to the group',
-          'seenBy': [],
-          'createdAt': timestamp,
-        });
         break;
 
       case 'Leave Group':
         _showLeaveGroupDialog();
-
-        await firestore.collection('groupnotifications').add({
-          'userId': userId,
-          'groupId': groupId,
-          'type': 'message',
-          'action': 'left the group',
-          'seenBy': [],
-          'createdAt': timestamp,
-        });
         break;
 
       case 'Edit Group':
         _showEditGroupDialog();
-
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'userId': user?.uid,
-          'groupId': groupId,
-          'type': 'message',
-          'action': 'edited the group name',
-          'seenBy': [],
-          'createdAt': Timestamp.now(),
-        });
         break;
 
       case 'Delete Group':
         _showDeleteGroupDialog();
-
-        final memberSnapshot =
-            await firestore
-                .collection('groupmembers')
-                .where('groupId', isEqualTo: groupId)
-                .get();
-
-        for (final doc in memberSnapshot.docs) {
-          final memberId = doc['userId'];
-
-          await firestore.collection('usernotifications').add({
-            'userId': memberId,
-            'groupId': groupId,
-            'type': 'message',
-            'action': 'The group "$groupName" has been deleted',
-            'isSeen': false,
-            'createdAt': timestamp,
-          });
-        }
-
         break;
 
       case 'Invite Member':
@@ -492,7 +429,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                       description: description,
                       paidByUser: selectedPaidBy,
                     );
-                    Navigator.pop(context);
                   },
                   child: const Text("Add"),
                 ),
@@ -504,16 +440,133 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     );
   }
 
-  Future<void> _showAddTODOList() async {
-    final todoTitleController = TextEditingController();
-    final todoDescriptionController = TextEditingController();
-    DateTime? selectedDueDate;
+  void addExpense({
+    required String groupId,
+    required String title,
+    required String amountText,
+    required String description,
+    String? paidByUser,
+  }) async {
+    if (title.isEmpty || amountText.isEmpty || paidByUser == null) {
+      showSuccessFlushbar(context, "Please fill in all required fields.");
+      return;
+    }
 
+    double? amount = double.tryParse(amountText);
+    if (amount == null || amount <= 0) {
+      showSuccessFlushbar(context, "Please enter a valid amount.");
+      return;
+    }
+
+    try {
+      final expenseId = await ValidationService().addExpense(
+        title: title,
+        groupId: groupId,
+        amount: amount.toString(),
+        paidBy: paidByUser,
+        description: description,
+      );
+
+      if (expenseId != null) {
+        // Clear input fields
+        expenseTitleController.clear();
+        expenseDescriptionController.clear();
+        expenseAmountController.clear();
+
+        // ✅ Add notification here
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'userId': user?.uid, // or whatever identifier you're using
+          'groupId': groupId,
+          'type': 'message',
+          'action': 'added an expense to the group',
+          'seenBy': [],
+          'createdAt': Timestamp.now(),
+        });
+
+        Navigator.pop(context);
+
+        if (!mounted) return;
+        showSuccessFlushbar(context, "Expense added successfully.");
+      } else {
+        if (!mounted) return;
+        showErrorDialog(
+          context,
+          "Something went wrong. Please try again later.",
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      showErrorDialog(context, "Something went wrong. Please try again later.");
+    }
+  }
+
+  Future<void> _showAddTODOList() async {
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            final todoTitleController = TextEditingController();
+            final todoDescriptionController = TextEditingController();
+            DateTime? selectedDueDate;
+
+            Future<void> handleAdd() async {
+              final title = todoTitleController.text.trim();
+              final description = todoDescriptionController.text.trim();
+              final createdBy = user?.uid;
+              final groupId = this.groupId;
+
+              if (title.isEmpty || createdBy == null) {
+                showSuccessFlushbar(context, "Please fill in the title.");
+                return;
+              }
+
+              try {
+                final todoId = await ValidationService().addTODOList(
+                  title: title,
+                  groupId: groupId,
+                  dueDate: selectedDueDate,
+                  description: description,
+                  createdBy: createdBy,
+                );
+
+                if (todoId != null) {
+                  await FirebaseFirestore.instance
+                      .collection('groupnotifications')
+                      .add({
+                        'userId': user?.uid,
+                        'groupId': groupId,
+                        'type': 'message',
+                        'action': 'added a TODO item to the group',
+                        'seenBy': [],
+                        'createdAt': Timestamp.now(),
+                      });
+
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+
+                  showSuccessFlushbar(context, "TODO added successfully.");
+
+                  // ✅ Reset fields
+                  todoTitleController.clear();
+                  todoDescriptionController.clear();
+                  setState(() {
+                    selectedDueDate = null;
+                  });
+                } else {
+                  showErrorDialog(
+                    context,
+                    "Something went wrong. Please try again later.",
+                  );
+                }
+              } catch (e) {
+                showErrorDialog(
+                  context,
+                  "Something went wrong. Please try again later.",
+                );
+              }
+            }
+
             return AlertDialog(
               title: const Text("Add TODO"),
               content: ConstrainedBox(
@@ -561,7 +614,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                               children: [
                                 Text(
                                   selectedDueDate != null
-                                      ? 'Due: ${selectedDueDate!.toLocal().toString().split(' ')[0]}'
+                                      ? 'Due: ${selectedDueDate?.toLocal().toString().split(' ')[0]}'
                                       : 'Select Due Date',
                                   style: const TextStyle(fontSize: 14),
                                 ),
@@ -589,28 +642,11 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    todoTitleController.clear();
-                    todoDescriptionController.clear();
                     Navigator.pop(context);
                   },
                   child: const Text("Cancel"),
                 ),
-                TextButton(
-                  onPressed: () {
-                    final title = todoTitleController.text.trim();
-                    final description = todoDescriptionController.text.trim();
-
-                    // Pass selectedDueDate directly (it's already DateTime?)
-                    addTODOList(
-                      title: title,
-                      description: description,
-                      dueDate: selectedDueDate,
-                    );
-
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Add"),
-                ),
+                TextButton(onPressed: handleAdd, child: const Text("Add")),
               ],
             );
           },
@@ -663,6 +699,17 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         if (user != null) {
           final _ = ref.refresh(userInfoProvider);
           final _ = ref.refresh(userGroupsProvider);
+
+          await FirebaseFirestore.instance
+              .collection('groupnotifications')
+              .add({
+                'userId': user.uid,
+                'groupId': groupId,
+                'type': 'message',
+                'action': 'left the group',
+                'seenBy': [],
+                'createdAt': Timestamp.now(),
+              });
         }
 
         if (!mounted) return;
@@ -712,10 +759,28 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
 
   Future<void> _deleteGroup() async {
     try {
-      // final groupId = _selectedGroup?['groupId'];
       final groupId = this.groupId;
 
+      final memberSnapshot =
+          await FirebaseFirestore.instance
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .get();
+
       await ValidationService().deleteGroupWithSubcollections(groupId);
+
+      for (final doc in memberSnapshot.docs) {
+        final memberId = doc['userId'];
+
+        await FirebaseFirestore.instance.collection('usernotifications').add({
+          'userId': memberId,
+          'groupId': groupId,
+          'type': 'message',
+          'action': 'The group "$groupName" has been deleted',
+          'isSeen': false,
+          'createdAt': Timestamp.now(),
+        });
+      }
 
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
@@ -723,10 +788,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
         final _ = ref.refresh(userGroupsProvider);
       }
 
-      if (!mounted) return;
-      showSuccessFlushbar(context, "Group deleted successfully.");
-
       // Navigate to MainScreen after deleting
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainScreen()),
@@ -786,6 +849,15 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       if (user != null) {
         final _ = ref.refresh(userInfoProvider);
         final _ = ref.refresh(userGroupsProvider);
+
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'userId': user.uid,
+          'groupId': groupId,
+          'type': 'message',
+          'action': 'edited the group name',
+          'seenBy': [],
+          'createdAt': Timestamp.now(),
+        });
       }
 
       widget.onUpdateAppBar(
@@ -916,94 +988,6 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       } else {
         if (!mounted) return;
         showSuccessFlushbar(context, "Group not found.");
-      }
-    } catch (e) {
-      if (!mounted) return; // widget is no longer in the widget tree
-      showErrorDialog(context, "Something went wrong. Please try again later.");
-    }
-  }
-
-  void addExpense({
-    required String groupId,
-    required String title,
-    required String amountText,
-    required String description,
-    String? paidByUser,
-  }) async {
-    if (title.isEmpty || amountText.isEmpty || paidByUser == null) {
-      showSuccessFlushbar(context, "Please fill in all requied fields.");
-      return;
-    }
-
-    double? amount = double.tryParse(amountText);
-    if (amount == null || amount <= 0) {
-      showSuccessFlushbar(context, "Please enter a valid amount.");
-      return;
-    }
-
-    try {
-      final expenseId = await ValidationService().addExpense(
-        title: title,
-        groupId: groupId,
-        amount: amount.toString(),
-        paidBy: paidByUser,
-        description: description,
-      );
-
-      if (expenseId != null) {
-        if (!mounted) return;
-        showSuccessFlushbar(context, "Expense added successfully.");
-
-        // Clear input fields after success
-        expenseTitleController.clear();
-        expenseDescriptionController.clear();
-        expenseAmountController.clear();
-
-        // No need to call _fetchExpenses(); Riverpod stream will auto-update
-      } else {
-        if (!mounted) return; // widget is no longer in the widget tree
-        showErrorDialog(
-          context,
-          "Something went wrong. Please try again later.",
-        );
-      }
-    } catch (e) {
-      if (!mounted) return; // widget is no longer in the widget tree
-      showErrorDialog(context, "Something went wrong. Please try again later.");
-    }
-  }
-
-  Future<void> addTODOList({
-    required String title,
-    required String description,
-    required DateTime? dueDate,
-  }) async {
-    final groupId = this.groupId;
-    final createdBy = user?.uid;
-
-    if (title.isEmpty || createdBy == null) {
-      showSuccessFlushbar(context, "Please fill in the title.");
-      return;
-    }
-
-    try {
-      final todoId = await ValidationService().addTODOList(
-        title: title,
-        groupId: groupId,
-        dueDate: dueDate,
-        description: description,
-        createdBy: createdBy,
-      );
-
-      if (todoId != null) {
-        if (!mounted) return;
-        showSuccessFlushbar(context, "TODO added successfully.");
-      } else {
-        if (!mounted) return; // widget is no longer in the widget tree
-        showErrorDialog(
-          context,
-          "Something went wrong. Please try again later.",
-        );
       }
     } catch (e) {
       if (!mounted) return; // widget is no longer in the widget tree

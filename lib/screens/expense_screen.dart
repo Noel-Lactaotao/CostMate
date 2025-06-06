@@ -1,7 +1,7 @@
+import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -22,6 +22,42 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
   @override
   void initState() {
     super.initState();
+  }
+
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 2),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
   }
 
   Future<String> getUserEmail(String uid) async {
@@ -62,7 +98,6 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
       final data = querySnapshot.docs.first.data();
       return data['role'] ?? 'none';
     } catch (e) {
-      debugPrint('Error getting user role: $e');
       return 'none';
     }
   }
@@ -84,7 +119,8 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
           .doc(expenseId)
           .update({'status': 'Approved'});
     } catch (e) {
-      debugPrint('Error approving expense: $e');
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
 
     await FirebaseFirestore.instance.collection('groupnotifications').add({
@@ -102,13 +138,6 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
     Map<String, dynamic> expenseData,
     String expenseId,
   ) async {
-    final user = FirebaseAuth.instance.currentUser;
-    final groupId = expenseData['groupId'];
-
-    if (user == null || groupId == null) return;
-
-    final expenseTitle = expenseData['expenseTitle'] ?? 'Untitled';
-
     switch (choice) {
       case 'Edit Expense':
         _showEditExpenseDialog(
@@ -119,15 +148,6 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
           currentDescription: expenseData['expenseDescription'] ?? '',
           currentPaidBy: expenseData['paidBy'],
         );
-
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'edited the expense: $expenseTitle',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
 
       case 'Delete Expense':
@@ -135,54 +155,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
           expenseId: expenseId,
           title: expenseData['expenseTitle'] ?? 'Untitled',
         );
-
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'deleted the expense: $expenseTitle',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
-    }
-  }
-
-  Future<void> updateExpense({
-    required String expenseId,
-    required String title,
-    required String amountText,
-    required String description,
-    required String? paidByUser,
-  }) async {
-    double? amount = double.tryParse(amountText);
-    if (amount == null) {
-      if (kDebugMode) {
-        print('Invalid amount format');
-      }
-      return;
-    }
-
-    try {
-      final expenseDocRef = FirebaseFirestore.instance
-          .collection('expenses')
-          .doc(expenseId);
-
-      await expenseDocRef.update({
-        'expenseTitle': title,
-        'expenseAmount': amount,
-        'expenseDescription': description,
-        'expensePaidBy': paidByUser,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (kDebugMode) {
-        print('Expense updated successfully');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error updating expense: $e');
-      }
     }
   }
 
@@ -230,9 +203,8 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching group members: $e');
-      }
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
 
     if (currentUserEmail != null) {
@@ -340,8 +312,6 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                       description: description,
                       paidByUser: selectedPaidBy,
                     );
-
-                    Navigator.pop(context);
                   },
                   child: const Text("Save"),
                 ),
@@ -351,6 +321,68 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         );
       },
     );
+  }
+
+  Future<void> updateExpense({
+    required String expenseId,
+    required String title,
+    required String amountText,
+    required String description,
+    required String? paidByUser,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    final expenseSnapshot =
+        await FirebaseFirestore.instance
+            .collection('expenses')
+            .where('expenseId', isEqualTo: expenseId)
+            .get();
+
+    String expenseTitle = 'None';
+    String groupId = 'None';
+    if (expenseSnapshot.docs.isNotEmpty) {
+      expenseTitle = expenseSnapshot.docs.first['expenseTitle'] ?? 'None';
+      groupId = expenseSnapshot.docs.first['groupId'] ?? 'None';
+    }
+
+    double? amount = double.tryParse(amountText);
+    if (!mounted) return;
+    if (amount == null) {
+      showSuccessFlushbar(context, "Invalid amount format.");
+      return;
+    }
+
+    try {
+      final expenseDocRef = FirebaseFirestore.instance
+          .collection('expenses')
+          .doc(expenseId);
+
+      await expenseDocRef.update({
+        'expenseTitle': title,
+        'expenseAmount': amount,
+        'expenseDescription': description,
+        'expensePaidBy': paidByUser,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      await FirebaseFirestore.instance.collection('groupnotifications').add({
+        'action': 'edited the expense: $expenseTitle',
+        'userId': user?.uid,
+        'type': 'message',
+        'seenBy': [],
+        'groupId': groupId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Expense updated successfully.");
+    } catch (e) {
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
+    }
   }
 
   void _showDeleteExpenseDialog({
@@ -370,12 +402,42 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
               ),
               TextButton(
                 onPressed: () async {
+                  final user = FirebaseAuth.instance.currentUser;
+
+                  final expenseSnapshot =
+                      await FirebaseFirestore.instance
+                          .collection('expenses')
+                          .where('expenseId', isEqualTo: expenseId)
+                          .get();
+
+                  String expenseTitle = 'None';
+                  String groupId = 'None';
+                  if (expenseSnapshot.docs.isNotEmpty) {
+                    expenseTitle =
+                        expenseSnapshot.docs.first['expenseTitle'] ?? 'None';
+                    groupId = expenseSnapshot.docs.first['groupId'] ?? 'None';
+                  }
+
                   await FirebaseFirestore.instance
                       .collection('expenses')
                       .doc(expenseId)
                       .delete();
 
+                  // First pop the dialog
                   Navigator.pop(context);
+
+                  await FirebaseFirestore.instance
+                      .collection('groupnotifications')
+                      .add({
+                        'action': 'deleted the expense: $expenseTitle',
+                        'userId': user?.uid,
+                        'type': 'message',
+                        'seenBy': [],
+                        'groupId': groupId,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+
+                  Navigator.pop(context, 'deleted');
                 },
                 child: const Text(
                   'Delete',
@@ -614,7 +676,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black,
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),

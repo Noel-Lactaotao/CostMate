@@ -1,3 +1,4 @@
+import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/user_and_group_providers.dart';
 import 'package:costmate/screens/invite_screen.dart';
@@ -60,6 +61,42 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     });
   }
 
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 3),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
+  }
+
   void _onMenuSelected(String choice) async {
     if (choice == 'Create Group') {
       _showCreateGroupDialog();
@@ -96,9 +133,8 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                     final _ = ref.refresh(userGroupsProvider);
                   }
 
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Group Created")),
-                  );
+                  if (!mounted) return;
+                  showSuccessFlushbar(context, "Group created successfully.");
                 }
 
                 groupNameController.clear();
@@ -159,9 +195,11 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                       .collection('groupnotifications')
                       .add(notificationGroupData);
 
-                  ScaffoldMessenger.of(
+                  if (!mounted) return;
+                  showSuccessFlushbar(
                     context,
-                  ).showSnackBar(const SnackBar(content: Text("Joined Group")));
+                    "You successfully joined the group.",
+                  );
                 }
 
                 groupCodeController.clear();
@@ -178,70 +216,19 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
     setState(() {
       _selectedGroup = group;
     });
-
-    final firestore = FirebaseFirestore.instance;
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final String userId = currentUser!.uid;
     final groupId = group['groupId'];
-    final groupName = group['groupName'];
-    final timestamp = Timestamp.now();
 
     // Leave Group
     if (choice == 'Leave Group') {
       await _showLeaveGroupDialog();
-
-      final notificationGroupData = {
-        'userId': userId,
-        'groupId': groupId,
-        'type': 'message',
-        'action': 'left the group',
-        'seenBy': [],
-        'createdAt': timestamp,
-      };
-
-      await firestore
-          .collection('groupnotifications')
-          .add(notificationGroupData);
     }
     // Edit Group
     else if (choice == 'Edit Group') {
       await _showEditGroupDialog();
-
-      final notificationGroupData = {
-        'userId': userId,
-        'groupId': groupId,
-        'type': 'message',
-        'action': 'edited the group',
-        'seenBy': [],
-        'createdAt': timestamp,
-      };
-
-      await firestore
-          .collection('groupnotifications')
-          .add(notificationGroupData);
     }
     // Delete Group
     else if (choice == 'Delete Group') {
       await _showDeleteGroupDialog();
-
-      final memberSnapshot =
-          await firestore
-              .collection('groupmembers')
-              .where('groupId', isEqualTo: groupId)
-              .get();
-
-      for (final doc in memberSnapshot.docs) {
-        final memberId = doc['userId'];
-
-        await firestore.collection('usernotifications').add({
-          'userId': memberId,
-          'groupId': groupId,
-          'type': 'message',
-          'action': 'The group "$groupName" has been deleted',
-          'isSeen': false,
-          'createdAt': timestamp,
-        });
-      }
     }
     // View Group Code (no notification needed)
     else if (choice == 'View Group Code') {
@@ -286,10 +273,10 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
                       icon: const Icon(Icons.copy),
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: groupCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Group code copied to clipboard'),
-                          ),
+                        if (!mounted) return;
+                        showSuccessFlushbar(
+                          context,
+                          "Group code copied to Clipboard.",
                         );
                       },
                     ),
@@ -304,14 +291,12 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
               ),
         );
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Group not found.')));
+        if (!mounted) return;
+        showSuccessFlushbar(context, "Group not found.");
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error fetching group code: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -364,18 +349,24 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
 
         if (!context.mounted) return;
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('You left the group.')));
+        if (!mounted) return;
+        showSuccessFlushbar(context, "You left the group.");
+
+        await FirebaseFirestore.instance.collection('groupnotifications').add({
+          'userId': userId,
+          'groupId': groupId,
+          'type': 'message',
+          'action': 'left the group',
+          'seenBy': [],
+          'createdAt': Timestamp.now(),
+        });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You are not a member of this group.')),
-        );
+        if (!mounted) return;
+        showSuccessFlushbar(context, "You are not a member of the Group.");
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error leaving group: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -411,7 +402,37 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
       final groupId = _selectedGroup?['groupId'];
       if (groupId == null) return;
 
+      final memberSnapshot =
+          await FirebaseFirestore.instance
+              .collection('groupmembers')
+              .where('groupId', isEqualTo: groupId)
+              .get();
+
+      final groupSnapshot =
+          await FirebaseFirestore.instance
+              .collection('groups')
+              .where('groupId', isEqualTo: groupId)
+              .get();
+
+      String groupName = 'Unnamed Group';
+      if (groupSnapshot.docs.isNotEmpty) {
+        groupName = groupSnapshot.docs.first['groupName'] ?? 'Unnamed Group';
+      }
+
       await ValidationService().deleteGroupWithSubcollections(groupId);
+
+      for (final doc in memberSnapshot.docs) {
+        final memberId = doc['userId'];
+
+        await FirebaseFirestore.instance.collection('usernotifications').add({
+          'userId': memberId,
+          'groupId': groupId,
+          'type': 'message',
+          'action': 'The group "$groupName" has been deleted',
+          'isSeen': false,
+          'createdAt': Timestamp.now(),
+        });
+      }
 
       // Refresh userInfoProvider
       final user = FirebaseAuth.instance.currentUser;
@@ -420,15 +441,13 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
         final _ = ref.refresh(userGroupsProvider);
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Group deleted successfully.')),
-      );
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Group deleted successfully.");
 
       // NO navigation here anymore
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error deleting group: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -478,18 +497,27 @@ class _MyHomeScreenState extends ConsumerState<MyHomeScreen> {
       await groupRef.update({'groupName': newName});
 
       final user = FirebaseAuth.instance.currentUser;
+      final userId = user?.uid;
+      
       if (user != null) {
         final _ = ref.refresh(userInfoProvider);
         final _ = ref.refresh(userGroupsProvider);
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Group name updated.')));
+      await FirebaseFirestore.instance.collection('groupnotifications').add({
+        'userId': userId,
+        'groupId': groupId,
+        'type': 'message',
+        'action': 'edited the group',
+        'seenBy': [],
+        'createdAt': Timestamp.now(),
+      });
+
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Group name Updated successfully.");
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating name: $e')));
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 

@@ -1,10 +1,10 @@
 import 'dart:core';
 
+import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:costmate/providers/expenses_todos_members_providers.dart';
 import 'package:costmate/screens/expense_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,6 +34,42 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
   void initState() {
     super.initState();
     _loadSavedFilters(ref);
+  }
+
+  void showSuccessFlushbar(BuildContext context, String message) {
+    Flushbar(
+      message: message,
+      // icon: const Icon(Icons.check_circle, size: 28.0, color: Colors.green),
+      duration: const Duration(seconds: 2),
+      margin: const EdgeInsets.all(8),
+      borderRadius: BorderRadius.circular(8),
+      flushbarPosition: FlushbarPosition.TOP,
+      backgroundColor: Colors.black87,
+      animationDuration: const Duration(milliseconds: 500),
+    ).show(context);
+  }
+
+  void showErrorDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              'Error',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+    );
   }
 
   Future<void> _loadSavedFilters(WidgetRef ref) async {
@@ -323,30 +359,10 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
           currentDescription: expenseData['expenseDescription'] ?? '',
           currentPaidBy: expenseData['paidBy'],
         );
-
-        // Add notification for edit
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'edited the expense: $expenseTitle',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
 
       case 'Delete Expense':
         _showDeleteExpenseDialog(expenseId: expenseId, title: expenseTitle);
-
-        // Add notification for delete
-        await FirebaseFirestore.instance.collection('groupnotifications').add({
-          'action': 'deleted the expense: $expenseTitle',
-          'userId': user.uid,
-          'type': 'message',
-          'seenBy': [],
-          'groupId': groupId,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         break;
     }
   }
@@ -396,9 +412,8 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching group members: $e');
-      }
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
 
     if (currentUserEmail != null) {
@@ -507,7 +522,7 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                       paidByUser: selectedPaidBy,
                     );
 
-                    Navigator.pop(context);
+                    // Navigator.pop(context);
                   },
                   child: const Text("Save"),
                 ),
@@ -526,12 +541,25 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
     required String description,
     required String? paidByUser,
   }) async {
-    // Validate amount input
+    final user = FirebaseAuth.instance.currentUser;
+
+    final expenseSnapshot =
+        await FirebaseFirestore.instance
+            .collection('expenses')
+            .where('expenseId', isEqualTo: expenseId)
+            .get();
+
+    String expenseTitle = 'None';
+    String groupId = 'None';
+    if (expenseSnapshot.docs.isNotEmpty) {
+      expenseTitle = expenseSnapshot.docs.first['expenseTitle'] ?? 'None';
+      groupId = expenseSnapshot.docs.first['groupId'] ?? 'None';
+    }
+
     double? amount = double.tryParse(amountText);
+    if (!mounted) return;
     if (amount == null) {
-      if (kDebugMode) {
-        print('Invalid amount format');
-      }
+      showSuccessFlushbar(context, "Invalid amount format.");
       return;
     }
 
@@ -540,7 +568,6 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
           .collection('expenses')
           .doc(expenseId);
 
-      // Update the document fields
       await expenseDocRef.update({
         'expenseTitle': title,
         'expenseAmount': amount,
@@ -549,14 +576,23 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      if (kDebugMode) {
-        print('Expense updated successfully');
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      await FirebaseFirestore.instance.collection('groupnotifications').add({
+        'action': 'edited the expense: $expenseTitle',
+        'userId': user?.uid,
+        'type': 'message',
+        'seenBy': [],
+        'groupId': groupId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      showSuccessFlushbar(context, "Expense updated successfully.");
     } catch (e) {
-      if (kDebugMode) {
-        print('Error updating expense: $e');
-      }
-      // Optionally show error feedback to user
+      if (!mounted) return; // widget is no longer in the widget tree
+      showErrorDialog(context, "Something went wrong. Please try again later.");
     }
   }
 
@@ -577,11 +613,40 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
               ),
               TextButton(
                 onPressed: () async {
+                  final user = FirebaseAuth.instance.currentUser;
+
+                  final expenseSnapshot =
+                      await FirebaseFirestore.instance
+                          .collection('expenses')
+                          .where('expenseId', isEqualTo: expenseId)
+                          .get();
+
+                  String expenseTitle = 'None';
+                  String groupId = 'None';
+                  if (expenseSnapshot.docs.isNotEmpty) {
+                    expenseTitle =
+                        expenseSnapshot.docs.first['expenseTitle'] ?? 'None';
+                    groupId = expenseSnapshot.docs.first['groupId'] ?? 'None';
+                  }
+
+                  await FirebaseFirestore.instance
+                      .collection('groupnotifications')
+                      .add({
+                        'action': 'deleted the expense: $expenseTitle',
+                        'userId': user?.uid,
+                        'type': 'message',
+                        'seenBy': [],
+                        'groupId': groupId,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
                   await FirebaseFirestore.instance
                       .collection('expenses')
                       .doc(expenseId)
                       .delete();
                   Navigator.pop(context);
+
+                  if (!mounted) return;
+                  showSuccessFlushbar(context, "Expense successfully deleted.");
                 },
                 child: Text('Delete', style: TextStyle(color: Colors.red)),
               ),
@@ -788,8 +853,8 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                        onTap: () {
-                                          Navigator.push(
+                                        onTap: () async {
+                                          final result = await Navigator.push(
                                             context,
                                             MaterialPageRoute(
                                               builder:
@@ -798,6 +863,21 @@ class _ExpensesTabState extends ConsumerState<ExpensesTab> {
                                                   ),
                                             ),
                                           );
+
+                                          if (!mounted) return;
+
+                                          if (result == 'deleted') {
+                                            // Show success message
+                                            showSuccessFlushbar(
+                                              context,
+                                              "Expense successfully deleted.",
+                                            );
+
+                                            // Optionally refresh your data here
+                                            setState(() {
+                                              // Trigger a UI update if needed
+                                            });
+                                          }
                                         },
                                       ),
                                     ),
