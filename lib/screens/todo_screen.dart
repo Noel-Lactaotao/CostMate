@@ -712,132 +712,134 @@ class _TodoScreenState extends ConsumerState<TodoScreen> {
                         ? 'Loading...'
                         : (groupSnapshot.data ?? 'Unknown group');
 
-                return Scaffold(
-                  appBar: AppBar(
-                    title: Text(
-                      groupName,
-                      style: const TextStyle(
-                        fontSize: 27,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    backgroundColor: Colors.green,
-                    centerTitle: true,
-                    actions: [
-                      if (isAdminOrCoAdmin || isOwner)
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert),
-                          onSelected:
-                              (choice) =>
-                                  _onMenuSelected(choice, todo, todo['id']),
-                          itemBuilder:
-                              (context) => const [
-                                PopupMenuItem<String>(
-                                  value: 'Edit Todo',
-                                  child: Text('Edit'),
-                                ),
-                                PopupMenuItem<String>(
-                                  value: 'Delete Todo',
-                                  child: Text('Delete'),
-                                ),
-                              ],
+                return SafeArea(
+                  child: Scaffold(
+                    appBar: AppBar(
+                      title: Text(
+                        groupName,
+                        style: const TextStyle(
+                          fontSize: 27,
+                          fontWeight: FontWeight.bold,
                         ),
-                    ],
-                  ),
-                  body: SingleChildScrollView(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        width: isWide ? 600 : double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: Card(
-                                color: Colors.blue.shade50,
-                                elevation: 2,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 20,
-                                    horizontal: 35,
+                      ),
+                      backgroundColor: Colors.green,
+                      centerTitle: true,
+                      actions: [
+                        if (isAdminOrCoAdmin || isOwner)
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert),
+                            onSelected:
+                                (choice) =>
+                                    _onMenuSelected(choice, todo, todo['id']),
+                            itemBuilder:
+                                (context) => const [
+                                  PopupMenuItem<String>(
+                                    value: 'Edit Todo',
+                                    child: Text('Edit'),
                                   ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        title,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
+                                  PopupMenuItem<String>(
+                                    value: 'Delete Todo',
+                                    child: Text('Delete'),
                                   ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            buildDetailItem(
-                              const Icon(Icons.description),
-                              'Description',
-                              description,
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.account_circle),
-                              'Created by',
-                              todo['createdByEmail'] ?? 'Unknown user',
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.verified),
-                              'Status',
-                              status,
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.access_time),
-                              'Due Date',
-                              formattedDate,
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.access_time),
-                              'Created At',
-                              relativeTime,
-                            ),
-                            if (status == 'Pending')
+                                ],
+                          ),
+                      ],
+                    ),
+                    body: SingleChildScrollView(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          width: isWide ? 600 : double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
                               SizedBox(
                                 width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    showDoneDialog(
-                                      context: context,
-                                      onMarkTodoDone:
-                                          () => markTodoAsDone(
-                                            todoId,
-                                          ), // Pass the function reference, no parentheses
-                                      onAddExpense: () async {
-                                        await _showAddExpense(
-                                          groupId,
-                                        ); // wait for the dialog to finish
-                                        await markTodoAsDone(todoId);
-                                      }, // Pass the function reference
-                                    );
-                                  },
-                                  icon: const Icon(Icons.check),
-                                  label: const Text('Done'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
+                                child: Card(
+                                  color: Colors.blue.shade50,
+                                  elevation: 2,
+                                  child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
+                                      vertical: 20,
+                                      horizontal: 35,
                                     ),
-                                    textStyle: const TextStyle(fontSize: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          title,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
-                          ],
+                              const SizedBox(height: 24),
+                              buildDetailItem(
+                                const Icon(Icons.description),
+                                'Description',
+                                description,
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.account_circle),
+                                'Created by',
+                                todo['createdByEmail'] ?? 'Unknown user',
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.verified),
+                                'Status',
+                                status,
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.access_time),
+                                'Due Date',
+                                formattedDate,
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.access_time),
+                                'Created At',
+                                relativeTime,
+                              ),
+                              if (status == 'Pending')
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () {
+                                      showDoneDialog(
+                                        context: context,
+                                        onMarkTodoDone:
+                                            () => markTodoAsDone(
+                                              todoId,
+                                            ), // Pass the function reference, no parentheses
+                                        onAddExpense: () async {
+                                          await _showAddExpense(
+                                            groupId,
+                                          ); // wait for the dialog to finish
+                                          await markTodoAsDone(todoId);
+                                        }, // Pass the function reference
+                                      );
+                                    },
+                                    icon: const Icon(Icons.check),
+                                    label: const Text('Done'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      textStyle: const TextStyle(fontSize: 16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

@@ -506,152 +506,154 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                         ? 'Loading...'
                         : (groupSnapshot.data ?? 'Unknown group');
 
-                return Scaffold(
-                  appBar: AppBar(
-                    title: Text(
-                      groupName,
-                      style: const TextStyle(
-                        fontSize: 27,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    backgroundColor: Colors.green,
-                    centerTitle: true,
-                    actions: [
-                      if (isAdminOrCoAdmin || isOwner && status == 'pending')
-                        PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert),
-                          onSelected:
-                              (choice) => _onMenuSelected(
-                                choice,
-                                expense,
-                                expense['id'],
-                              ),
-                          itemBuilder:
-                              (context) => const [
-                                PopupMenuItem<String>(
-                                  value: 'Edit Expense',
-                                  child: Text('Edit'),
-                                ),
-                                PopupMenuItem<String>(
-                                  value: 'Delete Expense',
-                                  child: Text('Delete'),
-                                ),
-                              ],
+                return SafeArea(
+                  child: Scaffold(
+                    appBar: AppBar(
+                      title: Text(
+                        groupName,
+                        style: const TextStyle(
+                          fontSize: 27,
+                          fontWeight: FontWeight.bold,
                         ),
-                    ],
-                  ),
-                  body: SingleChildScrollView(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        width: isWide ? 600 : double.infinity,
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: double.infinity,
-                              child: Card(
-                                color: Colors.blue.shade50,
-                                elevation: 2,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 20,
-                                    horizontal: 35,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        title,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        '₱${amount.toStringAsFixed(2)}',
-                                        style: TextStyle(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green[700],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                      ),
+                      backgroundColor: Colors.green,
+                      centerTitle: true,
+                      actions: [
+                        if (isAdminOrCoAdmin || isOwner && status == 'pending')
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert),
+                            onSelected:
+                                (choice) => _onMenuSelected(
+                                  choice,
+                                  expense,
+                                  expense['id'],
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-
-                            buildDetailItem(
-                              const Icon(Icons.person),
-                              'Paid by',
-                              paidBy,
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.description),
-                              'Description',
-                              description,
-                            ),
-                            FutureBuilder<String>(
-                              future: getUserEmail(createdByUid),
-                              builder: (context, snapshot) {
-                                final String createdByEmail =
-                                    snapshot.connectionState ==
-                                            ConnectionState.waiting
-                                        ? 'Loading...'
-                                        : (snapshot.data ?? 'Unknown user');
-                                return buildDetailItem(
-                                  const Icon(Icons.account_circle),
-                                  'Created by',
-                                  createdByEmail,
-                                );
-                              },
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.verified),
-                              'Status',
-                              status,
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.calendar_today),
-                              'Created on',
-                              formattedDate,
-                            ),
-                            buildDetailItem(
-                              const Icon(Icons.access_time),
-                              'Created',
-                              relativeTime,
-                            ),
-                            const SizedBox(height: 20),
-
-                            if (status.toLowerCase() == 'pending' &&
-                                isAdminOrCoAdmin)
+                            itemBuilder:
+                                (context) => const [
+                                  PopupMenuItem<String>(
+                                    value: 'Edit Expense',
+                                    child: Text('Edit'),
+                                  ),
+                                  PopupMenuItem<String>(
+                                    value: 'Delete Expense',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
+                          ),
+                      ],
+                    ),
+                    body: SingleChildScrollView(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          width: isWide ? 600 : double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
                               SizedBox(
                                 width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: () async {
-                                    await approveExpense(expenseId, expense);
-                                    Navigator.pop(context);
-                                  },
-                                  icon: const Icon(Icons.check),
-                                  label: const Text('Approve'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
+                                child: Card(
+                                  color: Colors.blue.shade50,
+                                  elevation: 2,
+                                  child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
+                                      vertical: 20,
+                                      horizontal: 35,
                                     ),
-                                    textStyle: const TextStyle(fontSize: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          title,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          '₱${amount.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green[700],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
-                          ],
+                              const SizedBox(height: 24),
+                  
+                              buildDetailItem(
+                                const Icon(Icons.person),
+                                'Paid by',
+                                paidBy,
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.description),
+                                'Description',
+                                description,
+                              ),
+                              FutureBuilder<String>(
+                                future: getUserEmail(createdByUid),
+                                builder: (context, snapshot) {
+                                  final String createdByEmail =
+                                      snapshot.connectionState ==
+                                              ConnectionState.waiting
+                                          ? 'Loading...'
+                                          : (snapshot.data ?? 'Unknown user');
+                                  return buildDetailItem(
+                                    const Icon(Icons.account_circle),
+                                    'Created by',
+                                    createdByEmail,
+                                  );
+                                },
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.verified),
+                                'Status',
+                                status,
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.calendar_today),
+                                'Created on',
+                                formattedDate,
+                              ),
+                              buildDetailItem(
+                                const Icon(Icons.access_time),
+                                'Created',
+                                relativeTime,
+                              ),
+                              const SizedBox(height: 20),
+                  
+                              if (status.toLowerCase() == 'pending' &&
+                                  isAdminOrCoAdmin)
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () async {
+                                      await approveExpense(expenseId, expense);
+                                      Navigator.pop(context);
+                                    },
+                                    icon: const Icon(Icons.check),
+                                    label: const Text('Approve'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      textStyle: const TextStyle(fontSize: 16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -676,7 +678,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black,
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),

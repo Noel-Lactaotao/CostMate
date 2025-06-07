@@ -169,109 +169,111 @@ class _InvitationScreenState extends ConsumerState<InvitationScreen> {
       );
     }
 
-    return Scaffold(
-      body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _getInvitations(userId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final invitations = snapshot.data ?? [];
-
-          if (invitations.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _markInvitationsAsSeen(); // Mark unseen invites
-            });
-          }
-
-          if (invitations.isEmpty) {
-            return const Center(child: Text('No invitations at the moment.'));
-          }
-
-          return ListView.builder(
-            itemCount: invitations.length,
-            itemBuilder: (context, index) {
-              final invite = invitations[index];
-              final sentTime = invite['timestamp']?.toDate();
-              final timeAgo =
-                  sentTime != null ? timeago.format(sentTime) : 'some time ago';
-
-              return Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Center(
-                  child: Container(
-                    constraints: const BoxConstraints(
-                      maxWidth: 500,
-                      minWidth: 0,
-                    ),
-                    width: MediaQuery.of(context).size.width * 1,
-                    child: Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
+    return SafeArea(
+      child: Scaffold(
+        body: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _getInvitations(userId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+      
+            final invitations = snapshot.data ?? [];
+      
+            if (invitations.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _markInvitationsAsSeen(); // Mark unseen invites
+              });
+            }
+      
+            if (invitations.isEmpty) {
+              return const Center(child: Text('No invitations at the moment.'));
+            }
+      
+            return ListView.builder(
+              itemCount: invitations.length,
+              itemBuilder: (context, index) {
+                final invite = invitations[index];
+                final sentTime = invite['timestamp']?.toDate();
+                final timeAgo =
+                    sentTime != null ? timeago.format(sentTime) : 'some time ago';
+      
+                return Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Center(
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        maxWidth: 500,
+                        minWidth: 0,
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 3,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${invite['inviterName']} invites you to join ${invite['groupName']}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                      width: MediaQuery.of(context).size.width * 1,
+                      child: Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 3,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${invite['inviterName']} invites you to join ${invite['groupName']}',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Sent $timeAgo',
-                              style: TextStyle(color: Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                ElevatedButton(
-                                  onPressed:
-                                      () => _handleDeny(invite['inviteId']),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Sent $timeAgo',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed:
+                                        () => _handleDeny(invite['inviteId']),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                     ),
+                                    child: const Text('Deny'),
                                   ),
-                                  child: const Text('Deny'),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () => _handleAccept(invite),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton(
+                                    onPressed: () => _handleAccept(invite),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                     ),
+                                    child: const Text('Accept'),
                                   ),
-                                  child: const Text('Accept'),
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
